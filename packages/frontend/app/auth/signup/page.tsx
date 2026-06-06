@@ -2,12 +2,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import api from '@/lib/api'
 import { AuthLayout } from '@/components/auth/AuthLayout'
 import { Button } from '@/components/ui/Button'
 import { PhoneInput, OTPInput } from '@/components/ui/Input'
 import { Divider } from '@/components/ui/index'
 
-/* Village / community savings photo */
 const SIGNUP_IMAGE = 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=1200&h=1600&fit=crop&crop=center'
 
 function ImageCaption() {
@@ -35,15 +35,28 @@ function ImageCaption() {
 
 export default function SignupPage() {
     const router = useRouter()
-    const [step,    setStep]    = useState<'phone' | 'otp'>('phone')
-    const [phone,   setPhone]   = useState('')
-    const [otp,     setOtp]     = useState(Array(6).fill(''))
+    const [step, setStep] = useState<'phone' | 'name' | 'otp'>('phone')
+    const [phone, setPhone] = useState('')
+    const [name, setName] = useState('')
+    const [email, setEmail] = useState('')
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
 
-    const handleVerify = async () => {
+    const handleRegister = async () => {
+        setError('')
         setLoading(true)
-        await new Promise(r => setTimeout(r, 800))
-        router.push('/onboarding')
+        try {
+            await api.post('/v1/auth/register', {
+                phoneNumber: phone,
+                displayName: name,
+                email: email || undefined
+            })
+            router.push(`/auth/verify?phone=${encodeURIComponent(phone)}`)
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Registration failed')
+        } finally {
+            setLoading(false)
+        }
     }
 
     if (step === 'phone') return (
@@ -60,20 +73,26 @@ export default function SignupPage() {
                 </p>
             </div>
 
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{error}</p>
+                </div>
+            )}
+
             <div className="flex flex-col gap-4">
                 <PhoneInput label="Phone number" value={phone} onChange={setPhone} />
 
-                <Button fullWidth size="lg" disabled={phone.length < 7} onClick={() => setStep('otp')}>
-                    Send verification code
+                <Button fullWidth size="lg" disabled={phone.length < 7} onClick={() => setStep('name')}>
+                    Continue
                 </Button>
 
                 <Divider label="or sign up with" />
 
                 <div className="grid grid-cols-2 gap-2">
-                    <Button variant="secondary" className="gap-2">
+                    <Button variant="secondary" className="gap-2" disabled>
                         <GoogleIcon /> Google
                     </Button>
-                    <Button variant="secondary" className="gap-2">
+                    <Button variant="secondary" className="gap-2" disabled>
                         <AppleIcon /> Apple
                     </Button>
                 </div>
@@ -87,33 +106,68 @@ export default function SignupPage() {
         </AuthLayout>
     )
 
-    return (
-        <AuthLayout back="/auth/signup" sideImage={SIGNUP_IMAGE} imageSide="left" imageCaption={<ImageCaption />}>
+    if (step === 'name') return (
+        <AuthLayout sideImage={SIGNUP_IMAGE} imageSide="left" imageCaption={<ImageCaption />}>
             <div className="mb-8">
                 <h1 className="text-2xl font-bold text-[#0A1628] tracking-tight mb-1">
-                    Enter the 6-digit code
+                    Tell us about yourself
                 </h1>
                 <p className="text-sm text-[#8A91A0]">
-                    We sent it to{' '}
-                    <strong className="text-[#0A1628]">+234 {phone}</strong>
-                    {' · '}
-                    <button onClick={() => setStep('phone')} className="text-[#00A07A] hover:underline">
-                        change
-                    </button>
+                    We'll use this to personalize your experience
                 </p>
             </div>
 
-            <div className="flex flex-col gap-5">
-                <OTPInput value={otp} onChange={setOtp} />
-                <button className="text-sm text-[#8A91A0] hover:text-[#0A1628] underline underline-offset-2 text-center">
-                    I didn't receive a code
-                </button>
-                <Button fullWidth size="lg" loading={loading} disabled={otp.some(v => !v)} onClick={handleVerify}>
-                    Verify &amp; continue
-                </Button>
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{error}</p>
+                </div>
+            )}
+
+            <div className="flex flex-col gap-4">
+                <div>
+                    <label className="text-xs font-medium text-[#0A1628] block mb-1.5">Full name</label>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="John Doe"
+                        className="cf-input"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-medium text-[#0A1628] block mb-1.5">
+                        Email <span className="text-[#8A91A0] font-normal">(optional)</span>
+                    </label>
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="john@example.com"
+                        className="cf-input"
+                    />
+                </div>
+
+                <div className="flex gap-2">
+                    <Button variant="secondary" size="lg" className="flex-1" onClick={() => setStep('phone')}>
+                        ← Back
+                    </Button>
+                    <Button
+                        fullWidth
+                        size="lg"
+                        className="flex-1"
+                        disabled={!name.trim()}
+                        loading={loading}
+                        onClick={handleRegister}
+                    >
+                        Create account
+                    </Button>
+                </div>
             </div>
         </AuthLayout>
     )
+
+    return null
 }
 
 function GoogleIcon() {

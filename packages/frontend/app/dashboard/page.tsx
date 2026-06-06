@@ -1,103 +1,106 @@
 'use client'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, UserPlus, CreditCard, ArrowUpRight, ArrowDownLeft, Clock } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, UserPlus, CreditCard, ArrowUpRight, Clock } from 'lucide-react'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, Badge, Avatar, AvatarStack, ProgressBar, SectionTitle, EmptyState } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
-import { DEMO_CIRCLES, DEMO_ACTIVITY, formatNaira, formatDate } from '@/lib/data'
 
-/* ── Circle card ────────────────────────────── */
-function CircleCard({ circle }: { circle: typeof DEMO_CIRCLES[0] }) {
-    const progress = (circle.currentRound / circle.totalRounds) * 100
-    const color    = progress >= 75 ? 'amber' : 'teal'
-    const memberNames = circle.members.map(m => m.name)
-
-    return (
-        <Link href={`/circles/${circle.id}`}>
-            <Card className="hover:border-teal transition-colors cursor-pointer h-full">
-                {/* Top row */}
-                <div className="flex items-start justify-between mb-3">
-                    <div className="min-w-0 flex-1 mr-2">
-                        <p className="text-sm font-semibold text-navy truncate">{circle.name}</p>
-                        <p className="text-[11px] text-[#8A91A0] mt-0.5">
-                            Admin: {circle.adminName} · {circle.members.length} members
-                        </p>
-                    </div>
-                    <Badge variant={circle.status === 'active' ? 'active' : 'complete'}>
-                        {circle.status === 'active' ? 'Active' : 'Complete'}
-                    </Badge>
-                </div>
-
-                {/* Amount */}
-                <p className="text-xl font-bold text-navy tracking-tight mb-3">
-                    {formatNaira(circle.contributionAmount)}{' '}
-                    <span className="text-xs font-normal text-[#8A91A0]">/ {circle.frequency}</span>
-                </p>
-
-                {/* Progress */}
-                <ProgressBar
-                    value={progress}
-                    color={color}
-                    showLabel
-                    label={`Round ${circle.currentRound} of ${circle.totalRounds}`}
-                />
-
-                {/* Footer */}
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F7F8FA]">
-                    <AvatarStack names={memberNames} max={4} />
-                    <div className="text-right">
-                        <p className="text-[10px] text-[#8A91A0]">Next payment</p>
-                        <p className="text-xs font-semibold text-navy">Jun 7, 2026</p>
-                    </div>
-                </div>
-            </Card>
-        </Link>
-    )
+interface Circle {
+    id: string
+    name: string
+    admin: { userId: string; name: string }
+    rules: {
+        contributionAmount: number
+        currency: string
+        frequency: string
+        nextPaymentDate: number
+    }
+    members: any
+    rotation: {
+        cycle: number
+        currentBeneficiary: string
+    }
+    stats: {
+        healthScore: number
+    }
 }
 
-/* ── Activity item ──────────────────────────── */
-const activityIcon = {
-    'on-time': { bg: 'bg-teal-light', color: 'text-teal-mid', Icon: ArrowUpRight },
-    'late':    { bg: 'bg-amber-50',   color: 'text-amber-600', Icon: Clock       },
-    'pending': { bg: 'bg-gray-100',   color: 'text-gray-400',  Icon: Clock       },
-    'disputed':{ bg: 'bg-red-50',     color: 'text-red-500',   Icon: Clock       },
+interface Contribution {
+    id: string
+    groupId: string
+    paidBy: { userId: string; displayName: string }
+    amount: number
+    currency: string
+    status: string
+    isOnTime: boolean
+    actualDate: number
 }
 
-function ActivityItem({ event }: { event: typeof DEMO_ACTIVITY[0] }) {
-    const { bg, color, Icon } = activityIcon[event.status] ?? activityIcon['pending']
-    const isCredit = event.memberName !== 'Adaeze Okonkwo'
-
-    return (
-        <div className="flex items-center gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
-                <Icon size={15} className={color} />
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-navy truncate">
-                    {isCredit ? 'Payout received' : 'Payment confirmed'}
-                </p>
-                <p className="text-[11px] text-[#8A91A0]">
-                    {event.circleName} · Round {event.circleId === 'circle-ikeja' ? 5 : 9}
-                </p>
-            </div>
-            <div className="text-right flex-shrink-0">
-                <p className={`text-sm font-semibold ${isCredit ? 'text-green-600' : 'text-navy'}`}>
-                    {isCredit ? '+' : '−'}{formatNaira(event.amount)}
-                </p>
-                <p className="text-[10px] text-[#8A91A0]">Today</p>
-            </div>
-        </div>
-    )
-}
-
-/* ── Dashboard page ─────────────────────────── */
 export default function DashboardPage() {
+    const router = useRouter()
+    const { user } = useAuthStore()
+    const [circles, setCircles] = useState<Circle[]>([])
+    const [activity, setActivity] = useState<Contribution[]>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        if (user) {
+            fetchData()
+        } else {
+            router.push('/auth/login')
+        }
+    }, [user])
+
+    const fetchData = async () => {
+        try {
+            const [circlesRes, activityRes] = await Promise.all([
+                api.get('/v1/groups'),
+                api.get(`/v1/contributions/user/${user?.id}`)
+            ])
+
+            if (circlesRes.data.success) {
+                setCircles(circlesRes.data.data || [])
+            }
+            if (activityRes.data.success) {
+                setActivity((activityRes.data.data || []).slice(0, 5))
+            }
+        } catch (err) {
+            console.error('Failed to fetch dashboard data:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const formatNaira = (amount: number) => `₦${amount.toLocaleString()}`
+    const getMemberCount = (members: any) => {
+        if (!members) return 0
+        return typeof members === 'object' ? Object.keys(members).length : 0
+    }
+
+    if (loading) {
+        return (
+            <AppShell>
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            </AppShell>
+        )
+    }
+
     return (
         <AppShell>
             {/* Greeting */}
             <div className="mb-5">
-                <h1 className="text-xl font-bold text-navy tracking-tight">Good morning, Adaeze 👋</h1>
-                <p className="text-sm text-[#8A91A0] mt-0.5">You have 2 upcoming payments this week</p>
+                <h1 className="text-xl font-bold text-navy tracking-tight">
+                    Good morning, {user?.displayName || 'User'} 👋
+                </h1>
+                <p className="text-sm text-[#8A91A0] mt-0.5">
+                    You have {circles.length} active {circles.length === 1 ? 'circle' : 'circles'}
+                </p>
             </div>
 
             {/* Quick actions */}
@@ -123,15 +126,45 @@ export default function DashboardPage() {
             <section className="mb-6">
                 <SectionTitle
                     title="My circles"
-                    action={
+                    action={circles.length > 2 && (
                         <Link href="/circles" className="text-xs text-teal-mid font-medium hover:underline">
                             See all
                         </Link>
-                    }
+                    )}
                 />
-                {DEMO_CIRCLES.length > 0 ? (
+                {circles.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {DEMO_CIRCLES.map(c => <CircleCard key={c.id} circle={c} />)}
+                        {circles.slice(0, 4).map(circle => (
+                            <Link key={circle.id} href={`/circles/${circle.id}`}>
+                                <Card className="hover:border-teal transition-colors cursor-pointer h-full">
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="min-w-0 flex-1 mr-2">
+                                            <p className="text-sm font-semibold text-navy truncate">{circle.name}</p>
+                                            <p className="text-[11px] text-[#8A91A0] mt-0.5">
+                                                Admin: {circle.admin.name} · {getMemberCount(circle.members)} members
+                                            </p>
+                                        </div>
+                                        <Badge variant="active">Active</Badge>
+                                    </div>
+                                    <p className="text-xl font-bold text-navy tracking-tight mb-3">
+                                        {formatNaira(circle.rules.contributionAmount)}{' '}
+                                        <span className="text-xs font-normal text-[#8A91A0]">/ {circle.rules.frequency}</span>
+                                    </p>
+                                    <ProgressBar
+                                        value={Math.min(circle.rotation.cycle * 10, 100)}
+                                        color="teal"
+                                        showLabel
+                                        label={`Cycle ${circle.rotation.cycle}`}
+                                    />
+                                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F7F8FA]">
+                                        <p className="text-xs text-[#8A91A0]">Health: {circle.stats.healthScore}%</p>
+                                        <p className="text-xs font-semibold text-navy">
+                                            {new Date(circle.rules.nextPaymentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </p>
+                                    </div>
+                                </Card>
+                            </Link>
+                        ))}
                     </div>
                 ) : (
                     <Card>
@@ -149,42 +182,58 @@ export default function DashboardPage() {
                 )}
             </section>
 
-            {/* Upcoming payments */}
-            <section className="mb-6">
-                <SectionTitle title="Upcoming payments" />
-                <div className="flex flex-col gap-2">
-                    {[
-                        { circle: 'Ikeja Market Women', amount: 25000, due: 'Jun 7, 2026', urgent: true  },
-                        { circle: 'CampusSave Unilag',  amount: 10000, due: 'Jun 5, 2026', urgent: true  },
-                    ].map((p, i) => (
-                        <Card key={i} padding="sm" className="flex items-center gap-3">
-                            <div className={`w-1.5 h-10 rounded-full flex-shrink-0 ${p.urgent ? 'bg-amber-400' : 'bg-teal'}`} />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-navy truncate">{p.circle}</p>
-                                <p className="text-[11px] text-[#8A91A0]">Due {p.due}</p>
-                            </div>
-                            <div className="text-right flex-shrink-0">
-                                <p className="text-sm font-semibold text-navy">{formatNaira(p.amount)}</p>
-                                <Link href="/log-payment">
-                                    <span className="text-[11px] text-teal-mid font-medium hover:underline">Log payment</span>
-                                </Link>
-                            </div>
-                        </Card>
-                    ))}
-                </div>
-            </section>
-
             {/* Recent activity */}
             <section>
                 <SectionTitle
                     title="Recent activity"
-                    action={<span className="text-xs text-teal-mid font-medium cursor-pointer hover:underline">View all</span>}
+                    action={activity.length > 0 && (
+                        <Link href="/payments/history">
+                            <span className="text-xs text-teal-mid font-medium cursor-pointer hover:underline">View all</span>
+                        </Link>
+                    )}
                 />
-                <Card padding="none">
-                    <div className="px-5">
-                        {DEMO_ACTIVITY.map(e => <ActivityItem key={e.id} event={e} />)}
-                    </div>
-                </Card>
+                {activity.length > 0 ? (
+                    <Card padding="none">
+                        <div className="px-5">
+                            {activity.map(contrib => (
+                                <div key={contrib.id} className="flex items-center gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
+                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                        contrib.isOnTime ? 'bg-teal-light' : 'bg-amber-50'
+                                    }`}>
+                                        {contrib.isOnTime ? (
+                                            <ArrowUpRight size={15} className="text-teal-mid" />
+                                        ) : (
+                                            <Clock size={15} className="text-amber-600" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-navy truncate">
+                                            {contrib.paidBy.displayName}
+                                        </p>
+                                        <p className="text-[11px] text-[#8A91A0]">
+                                            {new Date(contrib.actualDate).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                        <p className="text-sm font-semibold text-navy">
+                                            {formatNaira(contrib.amount)}
+                                        </p>
+                                        <p className="text-[10px] text-[#8A91A0]">
+                                            {contrib.isOnTime ? 'On time' : 'Late'}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                ) : (
+                    <Card>
+                        <EmptyState
+                            title="No activity yet"
+                            description="Your payment activity will appear here"
+                        />
+                    </Card>
+                )}
             </section>
         </AppShell>
     )

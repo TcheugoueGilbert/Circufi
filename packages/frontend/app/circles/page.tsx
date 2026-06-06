@@ -1,15 +1,76 @@
 'use client'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, UserPlus } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, EmptyState, SectionTitle } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
 import { CircleCard } from '@/components/circles/CircleCard'
-import { DEMO_CIRCLES } from '@/lib/data'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
+
+interface Circle {
+    id: string
+    name: string
+    admin: { userId: string; name: string }
+    rules: {
+        contributionAmount: number
+        currency: string
+        frequency: string
+        nextPaymentDate: number
+    }
+    members: any
+    rotation: {
+        cycle: number
+        currentBeneficiary: string
+    }
+    stats: {
+        healthScore: number
+    }
+    status?: string
+}
 
 export default function CirclesPage() {
-    const active   = DEMO_CIRCLES.filter(c => c.status === 'active')
-    const complete = DEMO_CIRCLES.filter(c => c.status === 'complete')
+    const router = useRouter()
+    const { user } = useAuthStore()
+    const [circles, setCircles] = useState<Circle[]>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        if (!user) {
+            router.push('/auth/login')
+            return
+        }
+        fetchCircles()
+    }, [user])
+
+    const fetchCircles = async () => {
+        try {
+            const response = await api.get('/v1/groups')
+            if (response.data.success) {
+                setCircles(response.data.data || [])
+            }
+        } catch (err) {
+            console.error('Failed to fetch circles:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    if (loading) {
+        return (
+            <AppShell>
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            </AppShell>
+        )
+    }
+
+    // For now, treat all circles as active since backend doesn't have status field
+    const active = circles
+    const complete: Circle[] = []
 
     return (
         <AppShell>
@@ -30,7 +91,7 @@ export default function CirclesPage() {
                 </div>
             </div>
 
-            {DEMO_CIRCLES.length === 0 ? (
+            {circles.length === 0 ? (
                 <Card>
                     <EmptyState
                         title="No circles yet"

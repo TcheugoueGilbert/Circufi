@@ -1,13 +1,14 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, CreditCard, Check, Lock, ExternalLink } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, Badge, Avatar, ProgressBar, SectionTitle } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
-import { DEMO_CIRCLES, DEMO_ACTIVITY, formatNaira } from '@/lib/data'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
 type Tab = 'rotation' | 'members' | 'contributions' | 'audit'
 
@@ -18,13 +19,63 @@ const TABS: { id: Tab; label: string }[] = [
     { id: 'audit',         label: 'Audit trail'   },
 ]
 
-function RotationRow({ member, position, current, done }: {
-    member: typeof DEMO_CIRCLES[0]['members'][0]
+interface Group {
+    id: string
+    name: string
+    admin: { userId: string; name: string }
+    rules: {
+        contributionAmount: number
+        currency: string
+        frequency: string
+        nextPaymentDate: number
+    }
+    members: {
+        [userId: string]: {
+            joinedAt: number
+            status: string
+            role: string
+        }
+    }
+    rotation: {
+        cycle: number
+        order: string[]
+        currentBeneficiary: string
+        currentBeneficiaryIndex: number
+    }
+    stats: {
+        totalCollected: number
+        totalDisbursed: number
+        healthScore: number
+        completedCycles: number
+    }
+}
+
+interface Member {
+    userId: string
+    displayName: string
+    reputation: {
+        totalPayments: number
+        onTimeRate: number
+    }
+}
+
+interface Contribution {
+    id: string
+    paidBy: { userId: string; displayName: string }
+    amount: number
+    actualDate: number
+    isOnTime: boolean
+    paymentMethod: string
+    status: string
+}
+
+function RotationRow({ member, position, current, done, isYou }: {
+    member: Member
     position: number
     current: boolean
     done: boolean
+    isYou: boolean
 }) {
-    const isYou = member.userId === 'user-adaeze'
     return (
         <div className={clsx(
             'flex items-center gap-3 py-3 rounded-lg px-2 -mx-2 transition-colors',
@@ -39,10 +90,10 @@ function RotationRow({ member, position, current, done }: {
             )}>
                 {position}
             </div>
-            <Avatar name={member.name} size="sm" />
+            <Avatar name={member.displayName} size="sm" />
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-navy truncate">
-                    {member.name}
+                    {member.displayName}
                     {isYou && <span className="text-[11px] text-[#8A91A0] ml-1">(you)</span>}
                 </p>
                 <p className="text-[11px] text-[#8A91A0]">
@@ -64,30 +115,30 @@ function RotationRow({ member, position, current, done }: {
 }
 
 function MemberRow({ member, isAdmin }: {
-    member: typeof DEMO_CIRCLES[0]['members'][0]
+    member: Member
     isAdmin?: boolean
 }) {
     return (
         <div className="flex items-center gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
-            <Avatar name={member.name} size="md" />
+            <Avatar name={member.displayName} size="md" />
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-navy truncate">{member.name}</p>
+                    <p className="text-sm font-medium text-navy truncate">{member.displayName}</p>
                     {isAdmin && (
                         <span className="text-[10px] font-semibold text-teal-mid bg-teal-light px-1.5 py-0.5 rounded-full">Admin</span>
                     )}
                 </div>
                 <p className="text-[11px] text-[#8A91A0]">
-                    {member.totalPayments} payments · {Math.round(member.onTimeRate)}% on time
+                    {member.reputation.totalPayments} payments · {Math.round(member.reputation.onTimeRate)}% on time
                 </p>
             </div>
             <div className={clsx(
                 'text-[11px] font-semibold px-2 py-0.5 rounded-full',
-                member.onTimeRate >= 90 ? 'bg-teal-light text-teal-dark'   :
-                    member.onTimeRate >= 70 ? 'bg-amber-50 text-amber-700'     :
+                member.reputation.onTimeRate >= 90 ? 'bg-teal-light text-teal-dark'   :
+                    member.reputation.onTimeRate >= 70 ? 'bg-amber-50 text-amber-700'     :
                         'bg-gray-100 text-gray-500'
             )}>
-                {member.onTimeRate >= 90 ? 'Reliable' : member.onTimeRate >= 70 ? 'Good' : 'New'}
+                {member.reputation.onTimeRate >= 90 ? 'Reliable' : member.reputation.onTimeRate >= 70 ? 'Good' : 'New'}
             </div>
         </div>
     )
@@ -117,13 +168,80 @@ function AuditRow({ label, sub, hash }: { label: string; sub: string; hash?: str
 }
 
 export default function CircleDetailPage() {
-    // ✅ Fix: useParams() instead of sync params prop (Next.js 15)
+    const router = useRouter()
     const params = useParams()
     const id = params?.id as string
+    const { user } = useAuthStore()
 
     const [activeTab, setTab] = useState<Tab>('rotation')
-    const circle = DEMO_CIRCLES.find(c => c.id === id) ?? DEMO_CIRCLES[0]
-    const progress = (circle.currentRound / circle.totalRounds) * 100
+    const [group, setGroup] = useState<Group | null>(null)
+    const [members, setMembers] = useState<Member[]>([])
+    const [contributions, setContributions] = useState<Contribution[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState('')
+
+    useEffect(() => {
+        if (!user) {
+            router.push('/auth/login')
+            return
+        }
+        if (id) {
+            fetchData()
+        }
+    }, [id, user])
+
+    const fetchData = async () => {
+        try {
+            const [groupRes, membersRes, contributionsRes] = await Promise.all([
+                api.get(`/v1/groups/${id}`),
+                api.get(`/v1/groups/${id}/members`),
+                api.get(`/v1/groups/${id}/contributions`)
+            ])
+
+            if (groupRes.data.success) {
+                setGroup(groupRes.data.data)
+            }
+            if (membersRes.data.success) {
+                setMembers(membersRes.data.data || [])
+            }
+            if (contributionsRes.data.success) {
+                setContributions(contributionsRes.data.data || [])
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Failed to load circle data')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const formatNaira = (amount: number) => `₦${amount.toLocaleString()}`
+
+    if (loading) {
+        return (
+            <AppShell>
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            </AppShell>
+        )
+    }
+
+    if (error || !group) {
+        return (
+            <AppShell>
+                <div className="text-center py-12">
+                    <p className="text-red-600">{error || 'Circle not found'}</p>
+                    <Link href="/dashboard">
+                        <Button className="mt-4">Back to Dashboard</Button>
+                    </Link>
+                </div>
+            </AppShell>
+        )
+    }
+
+    const progress = group.rotation.cycle > 0
+        ? (group.rotation.currentBeneficiaryIndex / Object.keys(group.members).length) * 100
+        : 0
 
     return (
         <AppShell>
@@ -135,9 +253,9 @@ export default function CircleDetailPage() {
             <Card className="mb-4">
                 <div className="flex items-start justify-between mb-4">
                     <div className="min-w-0 flex-1 mr-3">
-                        <h1 className="text-lg font-bold text-navy tracking-tight">{circle.name}</h1>
+                        <h1 className="text-lg font-bold text-navy tracking-tight">{group.name}</h1>
                         <p className="text-xs text-[#8A91A0] mt-0.5">
-                            Admin: {circle.adminName} · {formatNaira(circle.contributionAmount)}/{circle.frequency} · {circle.members.length} members
+                            Admin: {group.admin.name} · {formatNaira(group.rules.contributionAmount)}/{group.rules.frequency} · {Object.keys(group.members).length} members
                         </p>
                     </div>
                     <Badge variant="active">Active</Badge>
@@ -145,10 +263,10 @@ export default function CircleDetailPage() {
 
                 <div className="grid grid-cols-4 gap-2 mb-4">
                     {[
-                        { label: 'Contribution', value: formatNaira(circle.contributionAmount) },
-                        { label: 'Round',        value: `${circle.currentRound} / ${circle.totalRounds}` },
-                        { label: 'Payout',       value: formatNaira(circle.contributionAmount * circle.members.length) },
-                        { label: 'Health',       value: `${circle.healthScore}%`, green: true },
+                        { label: 'Contribution', value: formatNaira(group.rules.contributionAmount) },
+                        { label: 'Round',        value: `${group.rotation.cycle}` },
+                        { label: 'Payout',       value: formatNaira(group.rules.contributionAmount * Object.keys(group.members).length) },
+                        { label: 'Health',       value: `${group.stats.healthScore}%`, green: true },
                     ].map((s, i) => (
                         <div key={i} className="bg-[#F7F8FA] rounded-lg p-2.5 text-center">
                             <p className="text-[10px] text-[#8A91A0] mb-1">{s.label}</p>
@@ -163,7 +281,7 @@ export default function CircleDetailPage() {
                     value={progress}
                     color={progress >= 75 ? 'amber' : 'teal'}
                     showLabel
-                    label={`Round ${circle.currentRound} of ${circle.totalRounds}`}
+                    label={`Cycle ${group.rotation.cycle}`}
                 />
             </Card>
 
@@ -188,9 +306,16 @@ export default function CircleDetailPage() {
             {/* Tab content */}
             {activeTab === 'rotation' && (
                 <Card>
-                    <SectionTitle title={`Rotation order — Round ${circle.currentRound}`} />
-                    {circle.members.map((m, i) => (
-                        <RotationRow key={m.userId} member={m} position={i + 1} done={i < 2} current={i === 2} />
+                    <SectionTitle title={`Rotation order — Cycle ${group.rotation.cycle}`} />
+                    {members.map((m, i) => (
+                        <RotationRow
+                            key={m.userId}
+                            member={m}
+                            position={i + 1}
+                            done={i < group.rotation.currentBeneficiaryIndex}
+                            current={i === group.rotation.currentBeneficiaryIndex}
+                            isYou={m.userId === user?.id}
+                        />
                     ))}
                     <div className="mt-4 pt-4 border-t border-[#F7F8FA]">
                         <Link href="/log-payment">
@@ -204,9 +329,9 @@ export default function CircleDetailPage() {
 
             {activeTab === 'members' && (
                 <Card>
-                    <SectionTitle title={`${circle.members.length} members`} />
-                    {circle.members.map((m, i) => (
-                        <MemberRow key={m.userId} member={m} isAdmin={i === 2} />
+                    <SectionTitle title={`${members.length} members`} />
+                    {members.map((m) => (
+                        <MemberRow key={m.userId} member={m} isAdmin={m.userId === group.admin.userId} />
                     ))}
                 </Card>
             )}
@@ -228,19 +353,19 @@ export default function CircleDetailPage() {
                             </button>
                         ))}
                     </div>
-                    {DEMO_ACTIVITY.map(e => (
-                        <div key={e.id} className="flex items-center gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
-                            <Avatar name={e.memberName} size="sm" />
+                    {contributions.map(c => (
+                        <div key={c.id} className="flex items-center gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
+                            <Avatar name={c.paidBy.displayName} size="sm" />
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-navy truncate">{e.memberName}</p>
+                                <p className="text-sm font-medium text-navy truncate">{c.paidBy.displayName}</p>
                                 <p className="text-[11px] text-[#8A91A0]">
-                                    {new Date(e.createdAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })} · {e.paymentMethod.replace('-', ' ')}
+                                    {new Date(c.actualDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })} · {c.paymentMethod.replace('_', ' ')}
                                 </p>
                             </div>
                             <div className="text-right flex-shrink-0">
-                                <p className="text-sm font-semibold text-navy">{formatNaira(e.amount)}</p>
-                                <Badge variant={e.status === 'on-time' ? 'ontime' : e.status as any}>
-                                    {e.status === 'on-time' ? 'On time' : e.status}
+                                <p className="text-sm font-semibold text-navy">{formatNaira(c.amount)}</p>
+                                <Badge variant={c.isOnTime ? 'ontime' : 'late'}>
+                                    {c.isOnTime ? 'On time' : 'Late'}
                                 </Badge>
                             </div>
                         </div>
@@ -257,11 +382,8 @@ export default function CircleDetailPage() {
                         </p>
                     </div>
                     <Card>
-                        <AuditRow label="Circle created" sub="Mama Chisom · Aug 20, 2025 · Rules locked" hash="0x3f1c...e8a4" />
-                        <AuditRow label="Round 1 — Funke Coker received" sub="8/8 contributions verified · Sep 30, 2025" hash="0x7b2a...c1f0" />
-                        <AuditRow label="Round 2 — Ngozi Kalu received" sub="8/8 contributions verified · Oct 31, 2025" hash="0x4e9d...b3c7" />
-                        <AuditRow label="Round 3 — Mama Chisom received" sub="8/8 contributions verified · Nov 30, 2025" hash="0x1a5f...d2e9" />
-                        <AuditRow label="Payment logged — Adaeze Okonkwo" sub="₦25,000 · Bank transfer · Jun 2, 2026" hash="0x7f3a...b4c2" />
+                        <AuditRow label="Circle created" sub={`${group.admin.name} · ${new Date().toLocaleDateString()} · Rules locked`} hash="0x3f1c...e8a4" />
+                        <p className="text-xs text-[#8A91A0] text-center py-4">Audit trail in development</p>
                     </Card>
                 </div>
             )}

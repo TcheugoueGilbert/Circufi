@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 import { AuthLayout } from '@/components/auth/AuthLayout'
 import { Button } from '@/components/ui/Button'
 import { PhoneInput, OTPInput } from '@/components/ui/Input'
@@ -36,15 +38,45 @@ function ImageCaption() {
 
 export default function LoginPage() {
     const router = useRouter()
-    const [step,    setStep]    = useState<'phone' | 'otp'>('phone')
-    const [phone,   setPhone]   = useState('')
-    const [otp,     setOtp]     = useState(Array(6).fill(''))
+    const { login } = useAuthStore()
+    const [step, setStep] = useState<'phone' | 'otp'>('phone')
+    const [phone, setPhone] = useState('')
+    const [otp, setOtp] = useState(Array(6).fill(''))
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
+
+    const handleSendCode = async () => {
+        setError('')
+        setLoading(true)
+        try {
+            // For login, we just send OTP to existing user
+            await api.post('/v1/auth/resend', { phoneNumber: phone })
+            setStep('otp')
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Failed to send code. User may not exist.')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     const handleVerify = async () => {
+        setError('')
         setLoading(true)
-        await new Promise(r => setTimeout(r, 800))
-        router.push('/dashboard')
+        try {
+            const response = await api.post('/v1/auth/verify', {
+                phoneNumber: phone,
+                code: otp.join('')
+            })
+            if (response.data.success) {
+                const { token, user } = response.data.data
+                login(token, user)
+                router.push('/dashboard')
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Verification failed')
+        } finally {
+            setLoading(false)
+        }
     }
 
     if (step === 'phone') return (
@@ -59,20 +91,26 @@ export default function LoginPage() {
                 </p>
             </div>
 
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{error}</p>
+                </div>
+            )}
+
             <div className="flex flex-col gap-4">
                 <PhoneInput label="Phone number" value={phone} onChange={setPhone} />
 
-                <Button fullWidth size="lg" disabled={phone.length < 7} onClick={() => setStep('otp')}>
+                <Button fullWidth size="lg" disabled={phone.length < 7} loading={loading} onClick={handleSendCode}>
                     Send verification code
                 </Button>
 
                 <Divider label="or sign in with" />
 
                 <div className="grid grid-cols-2 gap-2">
-                    <Button variant="secondary" className="gap-2">
+                    <Button variant="secondary" className="gap-2" disabled>
                         <GoogleIcon /> Google
                     </Button>
-                    <Button variant="secondary" className="gap-2">
+                    <Button variant="secondary" className="gap-2" disabled>
                         <AppleIcon /> Apple
                     </Button>
                 </div>
@@ -92,7 +130,7 @@ export default function LoginPage() {
                 <h1 className="text-2xl font-bold text-[#0A1628] tracking-tight mb-1">Enter the 6-digit code</h1>
                 <p className="text-sm text-[#8A91A0]">
                     We sent it to{' '}
-                    <strong className="text-[#0A1628]">+234 {phone}</strong>
+                    <strong className="text-[#0A1628]">{phone}</strong>
                     {' · '}
                     <button onClick={() => setStep('phone')} className="text-[#00A07A] hover:underline">
                         change
@@ -100,9 +138,18 @@ export default function LoginPage() {
                 </p>
             </div>
 
+            {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{error}</p>
+                </div>
+            )}
+
             <div className="flex flex-col gap-5">
                 <OTPInput value={otp} onChange={setOtp} />
-                <button className="text-sm text-[#8A91A0] hover:text-[#0A1628] underline underline-offset-2 text-center">
+                <button
+                    onClick={handleSendCode}
+                    className="text-sm text-[#8A91A0] hover:text-[#0A1628] underline underline-offset-2 text-center"
+                >
                     I didn't receive a code
                 </button>
                 <Button fullWidth size="lg" loading={loading} disabled={otp.some(v => !v)} onClick={handleVerify}>

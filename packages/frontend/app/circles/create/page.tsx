@@ -8,6 +8,8 @@ import { Card, Avatar } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { clsx } from 'clsx'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
 const STEPS = ['Details', 'Rules', 'Members', 'Launch']
 
@@ -41,6 +43,7 @@ export default function CreateCirclePage() {
     const router  = useRouter()
     const [step, setStep] = useState(0)
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
     const [copied, setCopied]   = useState(false)
 
     // Step 1 state
@@ -66,8 +69,39 @@ export default function CreateCirclePage() {
 
     const handleLaunch = async () => {
         setLoading(true)
-        await new Promise(r => setTimeout(r, 1000))
-        router.push('/circles/circle-ikeja')
+        setError('')
+        try {
+            const response = await api.post('/v1/groups', {
+                name: name,
+                description: desc,
+                rules: {
+                    contributionAmount: parseInt(amount),
+                    currency: 'NGN',
+                    frequency: freq.toLowerCase(),
+                    nextPaymentDate: Date.now() + (7 * 24 * 60 * 60 * 1000), // 1 week from now
+                    maxMembers: maxMembers,
+                    minTrustScore: 50
+                }
+            })
+
+            if (response.data.success) {
+                const groupId = response.data.data.id
+
+                // Add members if any
+                if (members.length > 0) {
+                    await Promise.all(members.map(member =>
+                        api.post(`/v1/groups/${groupId}/members`, {
+                            phoneNumber: member.phone
+                        }).catch(err => console.error('Failed to add member:', err))
+                    ))
+                }
+
+                router.push(`/circles/${groupId}`)
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Failed to create circle')
+            setLoading(false)
+        }
     }
 
     const copyCode = () => {
@@ -358,6 +392,11 @@ export default function CreateCirclePage() {
 
             <div className="max-w-lg">
                 <StepBar current={step} />
+                {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
+                        {error}
+                    </div>
+                )}
                 {content}
             </div>
         </AppShell>

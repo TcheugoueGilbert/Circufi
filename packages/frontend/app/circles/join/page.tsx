@@ -6,46 +6,94 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Card, Avatar, AvatarStack, ProgressBar, Badge } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
-import { formatNaira } from '@/lib/data'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
-const VALID_CODE = 'OSU-4X7K'
+interface Group {
+    id: string
+    name: string
+    admin: { userId: string; name: string }
+    rules: {
+        contributionAmount: number
+        currency: string
+        frequency: string
+        maxMembers?: number
+        minTrustScore?: number
+    }
+    members: {
+        [userId: string]: {
+            joinedAt: number
+            status: string
+            role: string
+        }
+    }
+    rotation: {
+        cycle: number
+    }
+    stats: {
+        healthScore: number
+    }
+}
 
 export default function JoinCirclePage() {
-    const router   = useRouter()
-    const [code,      setCode]      = useState('')
-    const [found,     setFound]     = useState(false)
+    const router = useRouter()
+    const { user } = useAuthStore()
+    const [code, setCode] = useState('')
+    const [group, setGroup] = useState<Group | null>(null)
     const [requested, setRequested] = useState(false)
-    const [loading,   setLoading]   = useState(false)
-    const [error,     setError]     = useState('')
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
 
     const handleCodeChange = (val: string) => {
         const formatted = val.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8)
         setCode(formatted)
-        setFound(false)
+        setGroup(null)
         setError('')
     }
 
     const handleSearch = async () => {
+        if (!code) return
+
         setLoading(true)
-        await new Promise(r => setTimeout(r, 600))
-        setLoading(false)
-        if (code.replace('-', '').length >= 6) {
-            setFound(true)
-            setError('')
-        } else {
-            setError('Circle not found. Check the code and try again.')
+        setError('')
+        try {
+            // Search by invite code
+            const response = await api.get(`/v1/groups/code/${code}`)
+            if (response.data.success) {
+                setGroup(response.data.data)
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Circle not found. Check the code and try again.')
+            setGroup(null)
+        } finally {
+            setLoading(false)
         }
     }
 
     const handleRequest = async () => {
+        if (!group || !user) return
+
         setLoading(true)
-        await new Promise(r => setTimeout(r, 800))
-        setLoading(false)
-        setRequested(true)
+        setError('')
+        try {
+            const response = await api.post(`/v1/groups/${group.id}/members`, {
+                userId: user.id
+            })
+
+            if (response.data.success) {
+                setRequested(true)
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Failed to join circle')
+        } finally {
+            setLoading(false)
+        }
     }
 
+    const formatNaira = (amount: number) => `₦${amount.toLocaleString()}`
+
     /* ─── Requested state ─────────────────── */
-    if (requested) return (
+    if (requested && group) return (
         <AppShell>
             <div className="flex flex-col items-center justify-center py-16 text-center max-w-sm mx-auto">
                 <div className="w-16 h-16 rounded-full bg-teal-light flex items-center justify-center mb-5">
@@ -53,10 +101,10 @@ export default function JoinCirclePage() {
                 </div>
                 <h2 className="text-xl font-bold text-navy mb-2">Request sent!</h2>
                 <p className="text-sm text-[#8A91A0] mb-6 leading-relaxed">
-                    Mama Chisom has been notified. You'll receive a notification once approved.
+                    {group.admin.name} has been notified. You'll receive a notification once approved.
                 </p>
                 <div className="bg-[#F7F8FA] rounded-xl border border-[#E8EAF0] px-5 py-4 w-full mb-6 text-left">
-                    <p className="text-sm font-semibold text-navy">Ikeja Market Women</p>
+                    <p className="text-sm font-semibold text-navy">{group.name}</p>
                     <p className="text-xs text-[#8A91A0] mt-1">Waiting for admin approval</p>
                     <div className="flex items-center gap-1.5 mt-2">
                         <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
@@ -69,6 +117,9 @@ export default function JoinCirclePage() {
             </div>
         </AppShell>
     )
+
+    const memberCount = group ? Object.keys(group.members).length : 0
+    const maxMembers = group?.rules.maxMembers || 8
 
     return (
         <AppShell>
@@ -94,7 +145,7 @@ export default function JoinCirclePage() {
                             className={clsx(
                                 'cf-input flex-1 text-center font-mono text-xl font-bold tracking-[0.3em] uppercase',
                                 error && 'border-red-300',
-                                found && 'border-teal bg-teal-light/30'
+                                group && 'border-teal bg-teal-light/30'
                             )}
                             placeholder="OSU-4X7K"
                             value={code}
@@ -111,7 +162,7 @@ export default function JoinCirclePage() {
                         </Button>
                     </div>
                     {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-                    {found && (
+                    {group && (
                         <p className="text-xs text-teal-mid mt-1 flex items-center gap-1">
                             <Check size={11} /> Circle found
                         </p>
@@ -119,13 +170,13 @@ export default function JoinCirclePage() {
                 </div>
 
                 {/* Circle preview */}
-                {found && (
+                {group && (
                     <Card className="border-teal/30">
                         {/* Header */}
                         <div className="flex items-start justify-between mb-4">
                             <div>
-                                <h3 className="text-base font-bold text-navy">Ikeja Market Women</h3>
-                                <p className="text-xs text-[#8A91A0] mt-0.5">Admin: Mama Chisom</p>
+                                <h3 className="text-base font-bold text-navy">{group.name}</h3>
+                                <p className="text-xs text-[#8A91A0] mt-0.5">Admin: {group.admin.name}</p>
                             </div>
                             <Badge variant="active">Active</Badge>
                         </div>
@@ -133,10 +184,10 @@ export default function JoinCirclePage() {
                         {/* Stats grid */}
                         <div className="grid grid-cols-2 gap-2 mb-4">
                             {[
-                                { label: 'Contribution', value: formatNaira(25000) + ' / month' },
-                                { label: 'Members',      value: '7 / 8 spots' },
-                                { label: 'Current round',value: 'Round 5 of 8' },
-                                { label: 'Circle health',value: '92%' },
+                                { label: 'Contribution', value: `${formatNaira(group.rules.contributionAmount)} / ${group.rules.frequency}` },
+                                { label: 'Members', value: `${memberCount} / ${maxMembers} spots` },
+                                { label: 'Current cycle', value: `Cycle ${group.rotation.cycle}` },
+                                { label: 'Circle health', value: `${group.stats.healthScore}%` },
                             ].map((s, i) => (
                                 <div key={i} className="bg-[#F7F8FA] rounded-lg p-2.5">
                                     <p className="text-[10px] text-[#8A91A0]">{s.label}</p>
@@ -145,43 +196,30 @@ export default function JoinCirclePage() {
                             ))}
                         </div>
 
-                        {/* Progress */}
-                        <ProgressBar value={62} showLabel label="Round progress" className="mb-4" />
-
-                        {/* Members */}
-                        <div className="flex items-center justify-between mb-4">
-                            <AvatarStack
-                                names={['Funke Coker','Ngozi Kalu','Mama Chisom','Adaeze O','Fatima N','Ibrahim S','Chidinma E']}
-                                max={5}
-                            />
-                            <span className="text-xs text-[#8A91A0]">7 members</span>
-                        </div>
-
                         {/* Eligibility */}
-                        <div className="flex items-center gap-2 bg-teal-light rounded-lg px-3 py-2.5">
+                        <div className="flex items-center gap-2 bg-teal-light rounded-lg px-3 py-2.5 mb-4">
                             <Check size={13} className="text-teal-mid flex-shrink-0" />
                             <div>
                                 <p className="text-xs font-semibold text-teal-dark">You're eligible to join</p>
-                                <p className="text-[10px] text-teal-mid">No minimum record requirement for this circle</p>
+                                {group.rules.minTrustScore && (
+                                    <p className="text-[10px] text-teal-mid">Minimum trust score: {group.rules.minTrustScore}</p>
+                                )}
                             </div>
                         </div>
 
-                        <Button fullWidth size="lg" className="mt-4" loading={loading} onClick={handleRequest}>
+                        <Button fullWidth size="lg" loading={loading} onClick={handleRequest}>
                             Request to join
                         </Button>
                     </Card>
                 )}
 
                 {/* Empty state hint */}
-                {!found && !error && (
+                {!group && !error && (
                     <div className="text-center py-8">
                         <div className="w-12 h-12 rounded-full bg-[#F7F8FA] flex items-center justify-center mx-auto mb-3">
                             <Users size={20} className="text-[#8A91A0]" />
                         </div>
                         <p className="text-sm text-[#8A91A0]">Enter a code to find your circle</p>
-                        <p className="text-xs text-[#8A91A0] mt-1">
-                            Try <button onClick={() => setCode('OSU-4X7K')} className="text-teal-mid underline">OSU-4X7K</button> to preview a demo
-                        </p>
                     </div>
                 )}
             </div>

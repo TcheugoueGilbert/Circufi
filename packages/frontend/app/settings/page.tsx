@@ -1,11 +1,14 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { User, Bell, Shield, Lock, LogOut, ChevronRight, Trash2 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, Avatar } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { clsx } from 'clsx'
+import api from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
 /* ── Toggle ──────────────────────────────── */
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -74,6 +77,11 @@ function SettingsRow({
 
 /* ── Main ────────────────────────────────── */
 export default function SettingsPage() {
+    const router = useRouter()
+    const { user, logout } = useAuthStore()
+    const [userData, setUserData] = useState<any>(null)
+    const [loading, setLoading] = useState(true)
+
     const [notifs, setNotifs] = useState({
         paymentReminders: true,
         paymentConfirmed: true,
@@ -86,6 +94,42 @@ export default function SettingsPage() {
         showToAdmins:   true,
     })
 
+    useEffect(() => {
+        if (!user) {
+            router.push('/auth/login')
+            return
+        }
+        fetchUserData()
+    }, [user])
+
+    const fetchUserData = async () => {
+        try {
+            const response = await api.get(`/v1/users/${user?.id}`)
+            if (response.data.success) {
+                setUserData(response.data.data)
+            }
+        } catch (err) {
+            console.error('Failed to fetch user data:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleLogout = () => {
+        logout()
+        router.push('/auth/login')
+    }
+
+    if (loading) {
+        return (
+            <AppShell>
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            </AppShell>
+        )
+    }
+
     return (
         <AppShell>
             <h1 className="text-xl font-bold text-navy tracking-tight mb-5">Settings</h1>
@@ -95,13 +139,15 @@ export default function SettingsPage() {
                 {/* Profile card */}
                 <Card>
                     <div className="flex items-center gap-4 mb-4">
-                        <Avatar name="Adaeze Okonkwo" size="xl" />
+                        <Avatar name={userData?.displayName || user?.displayName || 'User'} size="xl" />
                         <div className="flex-1 min-w-0">
-                            <p className="text-base font-bold text-navy">Adaeze Okonkwo</p>
-                            <p className="text-xs text-[#8A91A0] mt-0.5">+234 812 345 6789</p>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full mt-1">
-                ✓ Verified
-              </span>
+                            <p className="text-base font-bold text-navy">{userData?.displayName || user?.displayName}</p>
+                            <p className="text-xs text-[#8A91A0] mt-0.5">{userData?.phoneNumber || user?.phoneNumber}</p>
+                            {userData?.verificationStatus === 'verified' && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full mt-1">
+                  ✓ Verified
+                </span>
+                            )}
                         </div>
                         <Button size="sm" variant="secondary">Edit</Button>
                     </div>
@@ -109,12 +155,15 @@ export default function SettingsPage() {
                     <div className="flex flex-col gap-3">
                         <Input
                             label="Full name"
-                            defaultValue="Adaeze Okonkwo"
+                            value={userData?.displayName || ''}
+                            onChange={(e) => setUserData({...userData, displayName: e.target.value})}
                         />
                         <Input
                             label="Email"
                             type="email"
-                            placeholder="adaeze@email.com"
+                            placeholder="your@email.com"
+                            value={userData?.email || ''}
+                            onChange={(e) => setUserData({...userData, email: e.target.value})}
                             helper="Optional — used for account recovery"
                         />
                     </div>
@@ -188,6 +237,7 @@ export default function SettingsPage() {
                     <SettingsRow
                         icon={<LogOut size={15} />}
                         label="Sign out"
+                        onClick={handleLogout}
                     />
                     <SettingsRow
                         icon={<Trash2 size={15} />}
