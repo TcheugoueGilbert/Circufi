@@ -1,0 +1,124 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* ── Brand colors ── */
+  --color-navy:       #0A1628;
+  --color-teal:       #00C896;
+  --color-teal-mid:   #00A07A;
+  --color-teal-dark:  #065F46;
+  --color-teal-light: #E0FAF4;
+
+  /* ── Border radius ── */
+  --radius-pill: 9999px;
+
+  /* ── Font ── */
+  --font-sans: 'DM Sans', sans-serif;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    color: #0A1628;
+    background: #F7F8FA;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* Input */
+  .cf-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid #E8EAF0;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    color: #0A1628;
+    background-color: white;
+    transition: border-color 150ms;
+  }
+  .cf-input::placeholder { color: #8A91A0; }
+  .cf-input:focus {
+    outline: none;
+    border-color: var(--color-teal);
+  }
+
+  /* Card */
+  .cf-card {
+    background-color: white;
+    border-radius: 0.75rem;
+    border: 1px solid #E8EAF0;
+    padding: 1.25rem;
+  }
+
+  /* Status chips */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+  .chip-ontime {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: var(--color-teal-light);
+    color: var(--color-teal-dark);
+  }
+  .chip-late {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: #fffbeb;
+    color: #b45309;
+  }
+  .chip-pending {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: #f3f4f6;
+    color: #6b7280;
+  }
+  .chip-disputed {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: #fff1f2;
+    color: #dc2626;
+  }
+  .chip-active {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: var(--color-teal-light);
+    color: var(--color-teal-dark);
+  }
+  .chip-complete {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background-color: #f0fdf4;
+    color: #15803d;
+  }
+}
