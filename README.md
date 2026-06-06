@@ -1,438 +1,651 @@
-CircuFi
-<div align="center">
-https://via.placeholder.com/120x120?text=CircuFi
+# Digital Osusu - Full Stack Platform
 
-AI-Powered Trust Infrastructure for Cooperative Savings Groups
+**AI-Powered Trust Infrastructure for Cooperative Savings**
 
-https://img.shields.io/badge/license-MIT-blue.svg
-https://img.shields.io/badge/node-%253E%253D18.0.0-brightgreen
-https://img.shields.io/badge/TypeScript-5.4-blue
-https://img.shields.io/badge/PRs-welcome-brightgreen.svg
+> Digitizing traditional African rotating savings groups (osusu, ajo, esusu) with trust scoring, transparency, and AI-powered coordination.
 
-Features • Quick Start • Architecture • API Documentation • Demo
+## 📋 Table of Contents
 
-</div>
-📖 Overview
-CircuFi is a comprehensive platform that digitizes traditional African rotating savings groups (Osusu, Ajo, Esusu) by introducing trust, transparency, and AI-powered coordination. The platform helps groups create and manage contribution cycles, verify participant identities, track contributions, measure trustworthiness through behavioral signals, and provide transparent visibility into group health and member reliability.
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Technology Stack](#technology-stack)
+- [Features](#features)
+- [Core Concepts](#core-concepts)
+- [API Documentation](#api-documentation)
+- [AI Integration](#ai-integration)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [License](#license)
 
-Business Problem
-Millions of Africans participate in cooperative savings groups to access capital without relying on expensive loans or traditional financial institutions. However, these systems often suffer from:
+## 🎯 Project Overview
 
-Member defaults and disappearing beneficiaries
+**Digital Osusu** is a full-stack web application that modernizes rotating savings groups by introducing:
 
-Weak identity verification
+- ✅ **Digital Coordination** - No more cash handling, all tracking is transparent
+- ✅ **AI-Powered Trust** - Smart reputation scoring based on payment history
+- ✅ **Smart Rotation** - Automated beneficiary management
+- ✅ **Transparent Ledger** - Every contribution is logged and verified
+- ✅ **AI Assistant** - Intelligent chat for group inquiries (using Ollama)
 
-Poor record keeping
+### MVP Scope
+- Group creation & member management
+- Contribution tracking & ledger
+- Reputation profiles & trust scoring
+- Payment coordination (P2P flow logging)
+- AI assistant (Ollama integration)
+- Mobile-responsive web interface
 
-Limited transparency
+### Out of Scope (Post-MVP)
+- Actual payment processing
+- Advanced KYC/identity verification
+- Offline mode / SMS fallback
+- Insurance products or lending
 
-Trust-related challenges
+## 🏗️ Architecture
 
-Our Solution
-CircuFi transforms informal cooperative finance into a more transparent, accountable, and scalable system by making trust measurable, explainable, and portable.
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Frontend Layer                          │
+│         (Next.js React SPA - Mobile Responsive)        │
+│  - Group Dashboard, Member Management                  │
+│  - Contribution Tracker, Reputation Profiles           │
+│  - AI Chat Assistant                                   │
+├─────────────────────────────────────────────────────────┤
+│                Backend Layer                            │
+│      (Node.js/Express + TypeScript)                     │
+│  - REST API (Groups, Members, Contributions, etc.)     │
+│  - Business Logic (Reputation Scoring, Validation)     │
+│  - AI Orchestration (Ollama Integration)               │
+├─────────────────────────────────────────────────────────┤
+│               Data & AI Layer                           │
+│  - Firebase Realtime DB (Primary)                      │
+│  - Firebase Authentication                             │
+│  - Ollama (Local LLM for AI)                          │
+└─────────────────────────────────────────────────────────┘
+```
 
-✨ Features
-Core MVP Features
-Feature	Description	Status
-User Registration	Phone-based registration with OTP verification	✅ Complete
-Identity Verification	Mock ID verification system (ready for KYC integration)	✅ Complete
-Group Management	Create/join savings circles with customizable rules	✅ Complete
-Contribution Tracking	Log payments, track history, monitor obligations	✅ Complete
-Trust Scoring	AI-powered trust score based on behavioral metrics	✅ Complete
-Group Health Dashboard	Real-time group risk assessment and analytics	✅ Complete
-AI Assistant	Claude-powered chat assistant for user questions	✅ Complete
-Reputation System	Complete audit trail of trust-affecting events	✅ Complete
-Trust Score Algorithm
-CircuFi's trust score model is built on four key behavioral indicators:
+### Technology Stack
 
-text
-Trust Score = 
-  (Completion Rate × 0.40) +
-  (On-Time Rate × 0.35) +
-  (Membership Duration Score × 0.15) +
-  (Penalty Score × 0.10)
-Risk Categories
-Trust Score	Risk Category
-90 – 100	Excellent
-80 – 89	Good
-70 – 79	Fair
-60 – 69	Risky
-Below 60	High Risk
-AI Assistant Capabilities
-The AI assistant can answer questions about:
+**Frontend**
+- Next.js 14+ with React 18+
+- TypeScript
+- Tailwind CSS
+- Zustand (state management)
+- Axios (HTTP client)
 
-Trust scores and what they mean
+**Backend**
+- Node.js 18+
+- Express.js
+- TypeScript
+- Firebase Admin SDK
+- Zod (validation)
+- Ollama (AI/LLM)
 
-Group health and risk indicators
+**Database**
+- Firebase Realtime Database
+- Firebase Authentication
 
-Payment schedules and obligations
+**Deployment**
+- Frontend: Vercel / Netlify
+- Backend: Firebase Cloud Functions / Railway / Render
 
-Member reliability (general reputation)
+## 🚀 Getting Started
 
-How to improve trust scores
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+- Firebase account
+- Ollama (for AI features)
 
-🏗️ Architecture
-High-Level Architecture
-text
-┌─────────────────────────────────────────────────────────────┐
-│                    Frontend Layer (React SPA)               │
-│  - Group Dashboard     - Member Management                  │
-│  - Contribution Tracker - AI Chat Assistant                 │
-│  - Reputation Profiles  - Mobile Responsive                 │
-├─────────────────────────────────────────────────────────────┤
-│                    Backend Layer (Node.js + Express)        │
-│  - REST API            - Business Logic                     │
-│  - AI Orchestration    - Validation (Zod)                   │
-├─────────────────────────────────────────────────────────────┤
-│                    Data Layer (Firebase)                    │
-│  - Firestore (Primary DB)  - Authentication                 │
-│  - Realtime Updates        - File Storage                   │
-├─────────────────────────────────────────────────────────────┤
-│                    External Services                        │
-│  - Claude API (AI Assistant)                                │
-│  - (Future) Mobile Money APIs (M-Pesa, Flutterwave)        │
-└─────────────────────────────────────────────────────────────┘
-Technology Stack
-Layer	Technology	Purpose
-Frontend	React 18 + TypeScript	UI framework
-Tailwind CSS	Styling
-Zustand	State management
-Axios	HTTP client
-Recharts	Data visualization
-Backend	Node.js 18 + Express	API server
-TypeScript	Type safety
-Firebase Admin SDK	Database operations
-Anthropic Claude SDK	AI Assistant
-JWT	Authentication
-Zod	Validation
-Database	Firebase Firestore	Primary database
-Firebase Auth	User management
-Deployment	Vercel/Netlify	Frontend hosting
-Render/Railway	Backend hosting
-Data Models
-typescript
-// Core data structures
-interface User {
+### Installation
+
+#### 1. Clone & Setup
+```bash
+git clone <repo-url>
+cd Circufi-project_V3
+```
+
+#### 2. Backend Setup
+```bash
+cd backend
+cp .env.example .env
+
+# Edit .env with your Firebase credentials
+nano .env
+
+npm install
+npm run dev
+```
+
+#### 3. Frontend Setup
+```bash
+cd ../frontend
+cp .env.example .env.local
+
+# The backend URL should point to your local/deployed backend
+nano .env.local
+
+npm install
+npm run dev
+```
+
+#### 4. Start Ollama (for AI features)
+```bash
+# In a separate terminal
+ollama serve
+
+# In another terminal
+ollama pull mistral
+```
+
+### Verification
+- Frontend: http://localhost:3000
+- Backend: http://localhost:5000
+- Backend Health: http://localhost:5000/health
+- AI Service: http://localhost:5000/api/v1/chat/health
+
+## 📁 Project Structure
+
+```
+Circufi-project_V3/
+├── frontend/                          # Next.js Frontend
+│   ├── app/                           # Next.js app directory
+│   │   ├── page.tsx                   # Home page
+│   │   ├── layout.tsx                 # Root layout
+│   │   ├── auth/                      # Auth pages
+│   │   ├── dashboard/                 # Dashboard
+│   │   ├── circles/                   # Group management
+│   │   ├── notifications/             # Notifications
+│   │   └── ...                        # Other pages
+│   ├── components/                    # Reusable components
+│   │   ├── auth/                      # Auth components
+│   │   ├── circles/                   # Circle components
+│   │   ├── ui/                        # UI components
+│   │   └── layout/                    # Layout components
+│   ├── lib/                           # Utilities
+│   │   ├── api.ts                     # API client
+│   │   ├── hooks.ts                   # React hooks
+│   │   └── types/                     # TypeScript types
+│   ├── stores/                        # Zustand stores
+│   ├── public/                        # Static files
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── next.config.ts
+│   └── README.md
+│
+├── backend/                           # Express Backend
+│   ├── src/
+│   │   ├── index.ts                   # Server entry point
+│   │   ├── app.ts                     # Express app
+│   │   ├── types.ts                   # TypeScript interfaces
+│   │   ├── services/
+│   │   │   ├── firebaseService.ts    # Firebase operations
+│   │   │   ├── authService.ts         # Auth logic
+│   │   │   ├── reputationService.ts  # Reputation scoring
+│   │   │   └── ollamaAIService.ts    # AI integration
+│   │   ├── routes/
+│   │   │   ├── authRoutes.ts          # Auth endpoints
+│   │   │   ├── userRoutes.ts          # User endpoints
+│   │   │   ├── groupRoutes.ts         # Group endpoints
+│   │   │   ├── contributionRoutes.ts # Contribution endpoints
+│   │   │   ├── reputationRoutes.ts   # Reputation endpoints
+│   │   │   └── chatRoutes.ts         # Chat endpoints
+│   │   ├── middleware/
+│   │   │   ├── auth.ts               # Auth middleware
+│   │   │   └── errorHandler.ts       # Error handling
+│   │   └── utils/
+│   │       └── helpers.ts            # Helper functions
+│   ├── tests/                         # Test files
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── jest.config.js
+│   ├── .env.example
+│   └── README.md
+│
+├── documents/
+│   └── TECHNICAL_SPEC.md             # Full technical specification
+│
+└── README.md                          # This file
+```
+
+## ✨ Features
+
+### 1. **User Management**
+- Phone number-based registration
+- OTP verification (mock SMS in MVP)
+- User profiles with trust scores
+- Profile customization (name, email, reference contact)
+
+### 2. **Group Management (Osusu Circles)**
+- Create groups with custom rules
+- Invite members to groups
+- Set contribution amounts and frequency
+- Define minimum trust score requirements
+- View member list and roles
+- Admin controls for group settings
+
+### 3. **Contribution Tracking**
+- Log payment contributions
+- Multiple payment methods (manual, mobile money, bank transfer)
+- Contribution verification by admin
+- Payment status tracking
+- On-time payment calculation
+
+### 4. **Reputation & Trust Scoring**
+- Automatic trust score calculation
+- On-time payment rate tracking
+- Flag system for late/missed payments
+- Reputation event history
+- Group health score calculation
+- Member reliability ranking
+
+### 5. **Smart Rotation**
+- Automatic beneficiary assignment
+- Rotation order management
+- Payment progress tracking
+- Cycle advancement automation
+- Immutable rotation history
+
+### 6. **AI Chat Assistant**
+- Intelligent responses using Ollama
+- Context-aware answers about:
+  - Payment schedules
+  - Trust scores and member reliability
+  - Contribution history
+  - Group health and status
+- Session-based conversation history
+- Real-time context injection
+
+### 7. **Real-time Coordination**
+- Current beneficiary display
+- Next payment date tracking
+- Member payment status
+- Group notification system
+
+## 🧮 Core Concepts
+
+### Trust Score Algorithm
+```
+trustScore = 50 (base) 
+           + (onTimeRate * 0.3) 
+           + (min(totalPayments, 20) * 2) 
+           + (numberOfFlags * -5)
+
+Range: 0-100
+```
+
+**Example Calculation:**
+- Base score: 50
+- On-time rate: 80% → +24
+- Total payments: 10 → +20
+- Flags: 2 → -10
+- **Final score: 84 (Trusted)**
+
+### Group Health Score
+```
+healthScore = (memberAverageTrustScore * 0.6) 
+            + (paymentCompletionRate * 0.4)
+
+Range: 0-100
+```
+
+### Reputation Events
+- `payment_on_time` (+5) - Payment made on schedule
+- `payment_late` (-3) - Payment made after deadline
+- `payment_missed` (-10) - Payment not made
+- `dispute_resolved` (+2) - Dispute settled
+- `verified` (+3) - User verification completed
+- `flagged` (-5) - User flagged for violation
+
+### Rotation Logic
+1. Group created with initial member list
+2. Rotation order defined (usually FIFO)
+3. First member becomes beneficiary for cycle 1
+4. Other members contribute to beneficiary
+5. Once all contribute, rotation advances
+6. Next member becomes beneficiary for cycle 2
+7. Repeats until all members have received
+
+## 📡 API Documentation
+
+### Base URL
+```
+http://localhost:5000/api/v1
+```
+
+### Authentication
+```
+Authorization: Bearer {jwt_token}
+```
+
+### Authentication Endpoints
+```
+POST   /auth/register       # Register new user
+POST   /auth/verify         # Verify with OTP
+POST   /auth/resend         # Resend OTP
+```
+
+### User Endpoints
+```
+GET    /users/:userId       # Get user profile
+PUT    /users/:userId       # Update user profile
+```
+
+### Group Endpoints
+```
+POST   /groups              # Create group
+GET    /groups              # List user's groups
+GET    /groups/:id          # Get group details
+PUT    /groups/:id          # Update group
+POST   /groups/:id/members  # Add member
+DELETE /groups/:id/members/:userId # Remove member
+GET    /groups/:id/health   # Group health score
+GET    /groups/:id/rotation # Rotation details
+```
+
+### Contribution Endpoints
+```
+POST   /contributions                  # Log contribution
+GET    /contributions/:groupId         # Get group contributions
+GET    /contributions/user/:userId     # Get user contributions
+PUT    /contributions/:id              # Update contribution
+POST   /contributions/:id/verify       # Verify (admin)
+```
+
+### Reputation Endpoints
+```
+GET    /reputation/:userId            # Get reputation profile
+GET    /reputation/:userId/events     # Get reputation events
+```
+
+### Chat/AI Endpoints
+```
+POST   /chat/message                   # Send message
+GET    /chat/sessions                  # List sessions
+GET    /chat/sessions/:id              # Get session details
+GET    /chat/health                    # Check AI service
+```
+
+## 🤖 AI Integration (Ollama)
+
+### Setup Ollama
+```bash
+# Download and install from https://ollama.ai
+
+# Start Ollama service
+ollama serve
+
+# In another terminal, pull a model
+ollama pull mistral
+
+# Optional: Other models
+ollama pull neural-chat
+ollama pull orca-mini
+```
+
+### Configuration
+Add to `.env`:
+```
+OLLAMA_API_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
+OLLAMA_TEMPERATURE=0.7
+```
+
+### System Prompt
+The AI has full context of:
+- User reputation and payment history
+- Group details and member information
+- Current rotation and beneficiary
+- Recent events and flags
+
+### Example Queries
+- "When's my payout?"
+- "Is [member] trustworthy?"
+- "How much have I paid total?"
+- "Why was I flagged?"
+- "What's the group's health?"
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Watch mode
+npm run test:watch
+```
+
+### Test Files
+- `tests/services/reputation.test.ts` - Reputation scoring
+- `tests/api/auth.test.ts` - Authentication API
+
+### Manual Testing Flow
+1. **Register**: Create account with phone number
+2. **Verify**: Enter verification code
+3. **Create Group**: As admin, create a new osusu circle
+4. **Add Members**: Invite other users
+5. **Log Contribution**: Make payment contribution
+6. **Verify Contribution**: As admin, verify payment
+7. **Check Reputation**: View trust scores
+8. **Chat with AI**: Ask questions about group
+9. **View Rotation**: Check current beneficiary
+
+## 🚢 Deployment
+
+### Frontend Deployment (Vercel)
+```bash
+cd frontend
+
+# Connect your Git repository to Vercel
+# Environment variables:
+# - REACT_APP_API_URL=https://api.yourdomain.com
+
+vercel deploy --prod
+```
+
+### Backend Deployment (Railway/Render)
+```bash
+cd backend
+
+# Set environment variables:
+# - FIREBASE_PROJECT_ID
+# - FIREBASE_PRIVATE_KEY
+# - FIREBASE_CLIENT_EMAIL
+# - FIREBASE_DATABASE_URL
+# - JWT_SECRET
+# - OLLAMA_API_URL (for Ollama provider)
+
+# Deploy using your provider's CLI
+```
+
+### Environment Variables Checklist
+```
+✓ FIREBASE_PROJECT_ID
+✓ FIREBASE_PRIVATE_KEY
+✓ FIREBASE_CLIENT_EMAIL
+✓ FIREBASE_DATABASE_URL
+✓ JWT_SECRET (strong random string)
+✓ JWT_EXPIRATION
+✓ OLLAMA_API_URL
+✓ OLLAMA_MODEL
+✓ CORS_ORIGIN
+✓ NODE_ENV=production
+```
+
+## 🔐 Security Best Practices
+
+### Implemented
+- JWT token-based authentication
+- Phone number validation
+- CORS protection
+- Input validation (Zod)
+- Error handling
+- Secure error messages
+
+### Recommended for Production
+- Rate limiting (express-rate-limit)
+- Request signing / HMAC
+- End-to-end encryption
+- Audit logging
+- Secrets management
+- Security headers (helmet.js)
+- Request logging
+- DDoS protection
+
+## 🐛 Troubleshooting
+
+### Issue: Ollama Connection Refused
+**Solution:**
+```bash
+# Ensure Ollama is running
+ollama serve
+
+# Check if service is available
+curl http://localhost:11434/api/tags
+```
+
+### Issue: Firebase Authentication Error
+**Solution:**
+- Verify credentials in `.env`
+- Check database URL format
+- Ensure Firebase rules allow access
+- Verify service account permissions
+
+### Issue: Port Already in Use
+**Solution:**
+```bash
+# Backend: Change PORT in .env
+PORT=5001
+
+# Frontend: Change port in next.config.ts or use
+npm run dev -- -p 3001
+```
+
+### Issue: CORS Errors
+**Solution:**
+- Update `CORS_ORIGIN` in `.env`
+- Ensure frontend and backend URLs match settings
+
+## 📊 Data Models
+
+### User Model
+```typescript
+{
   id: string;
-  phoneNumber: string;
+  phoneNumber: string;        // Unique identifier
   displayName: string;
-  reputation: Reputation;
-  groupIds: string[];
+  email?: string;
   verificationStatus: "pending" | "verified" | "failed";
+  reputation: {
+    trustScore: number;       // 0-100
+    onTimeRate: number;       // 0-100
+    totalPayments: number;
+    totalDisbursed: number;
+    flags: string[];
+  };
+  groupIds: string[];         // Groups user belongs to
+  adminGroupIds: string[];    // Groups user administers
 }
+```
 
-interface Group {
+### Group Model
+```typescript
+{
   id: string;
   name: string;
+  description?: string;
   admin: { userId: string; name: string };
-  rules: GroupRules;
-  members: Record<string, GroupMember>;
-  rotation: Rotation;
-  stats: GroupStats;
+  rules: {
+    contributionAmount: number;
+    currency: string;          // NGN, KES, USD, etc.
+    frequency: "weekly" | "biweekly" | "monthly";
+    nextPaymentDate: number;
+    maxMembers?: number;
+    minTrustScore?: number;
+  };
+  members: Record<userId, MemberInfo>;
+  rotation: {
+    cycle: number;
+    order: string[];           // User IDs in rotation order
+    currentBeneficiary: string;
+    currentBeneficiaryIndex: number;
+  };
+  stats: {
+    totalCollected: number;
+    totalDisbursed: number;
+    healthScore: number;       // 0-100
+    completedCycles: number;
+  };
 }
+```
 
-interface Contribution {
+### Contribution Model
+```typescript
+{
   id: string;
   groupId: string;
   paidBy: { userId: string; displayName: string };
   amount: number;
+  currency: string;
+  currentBeneficiary: { userId: string; displayName: string };
+  paymentMethod: "manual" | "mobile_money" | "bank_transfer";
+  paymentReference?: string;
+  scheduledDate: number;
+  actualDate: number;
   isOnTime: boolean;
   status: "pending" | "completed" | "failed" | "disputed";
+  verifiedBy?: { userId: string; timestamp: number };
 }
-🚀 Quick Start
-Prerequisites
-Node.js 18.0 or higher
+```
 
-npm 9.0 or higher
+## 🤝 Contributing
 
-Firebase account (for database)
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-Anthropic API key (for AI assistant)
+### Code Style
+- Use TypeScript strictly
+- Follow ESLint configuration
+- Add tests for new features
+- Update documentation
 
-Installation
-bash
-# Clone the repository
-git clone https://github.com/yourusername/circufi.git
-cd circufi
+## 📄 License
+ISC
 
-# Install dependencies for all packages
-npm run setup
+## 👥 Authors
+- Developed for Digital Osusu MVP
+- Built with ❤️ for African cooperative savings communities
 
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your Firebase and Anthropic credentials
+## 📞 Support
+For issues, questions, or suggestions:
+1. Check existing issues
+2. Create a new issue with detailed description
+3. Include error messages and logs
+4. Specify environment (OS, Node version, etc.)
 
-# Build all packages
-npm run build
+## 🎓 Learn More
 
-# Start development servers
-npm run dev
-The application will be available at:
+- [Firebase Documentation](https://firebase.google.com/docs)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Express.js Guide](https://expressjs.com/)
+- [Ollama Documentation](https://github.com/ollama/ollama)
+- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
 
-Frontend: http://localhost:3000
+---
 
-Backend API: http://localhost:5000
+**Last Updated:** 2026-06-06  
+**Version:** 1.0.0 (MVP)
 
-Environment Variables
-env
-# Backend
-PORT=5000
-NODE_ENV=development
-
-# Firebase
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-FIREBASE_CLIENT_EMAIL=your-service-account-email
-FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
-
-# Anthropic Claude AI
-ANTHROPIC_API_KEY=sk-ant-...
-
-# JWT Secret
-JWT_SECRET=your-secret-key-change-this
-
-# Frontend
-REACT_APP_API_URL=http://localhost:5000/api
-REACT_APP_FIREBASE_PROJECT_ID=your-project-id
-REACT_APP_FIREBASE_API_KEY=your-firebase-api-key
-Docker Deployment
-bash
-# Build the Docker image
-docker build -t circufi:latest .
-
-# Run the container
-docker run -p 5000:5000 --env-file .env circufi:latest
-📚 API Documentation
-Authentication Endpoints
-Method	Endpoint	Description
-POST	/api/auth/register	Register new user
-POST	/api/auth/verify	Verify OTP code
-GET	/api/auth/me	Get current user
-Group Endpoints
-Method	Endpoint	Description
-POST	/api/groups	Create new group
-GET	/api/groups	List user's groups
-GET	/api/groups/:groupId	Get group details
-POST	/api/groups/:groupId/members	Add member
-DELETE	/api/groups/:groupId/members/:userId	Remove member
-GET	/api/groups/:groupId/health	Get group health score
-GET	/api/groups/:groupId/rotation	Get payment rotation
-Contribution Endpoints
-Method	Endpoint	Description
-POST	/api/contributions	Log contribution
-PUT	/api/contributions/:id/verify	Verify contribution (admin)
-GET	/api/contributions/group/:groupId	List group contributions
-GET	/api/contributions/user	List user's contributions
-Reputation Endpoints
-Method	Endpoint	Description
-GET	/api/reputation/:userId	Get user's trust score
-GET	/api/reputation/:userId/history	Get reputation history
-Chat Endpoints
-Method	Endpoint	Description
-POST	/api/chat/message	Send message to AI assistant
-GET	/api/chat/sessions	List chat sessions
-GET	/api/chat/sessions/:sessionId	Get session history
-Example API Calls
-javascript
-// Register a user
-const response = await fetch('/api/auth/register', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    phoneNumber: '+2347012345678',
-    displayName: 'John Doe'
-  })
-});
-
-// Create a group
-const group = await fetch('/api/groups', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    name: 'Lekki Ladies Savings',
-    contributionAmount: 50000,
-    currency: 'NGN',
-    frequency: 'weekly'
-  })
-});
-
-// Log a contribution
-const contribution = await fetch('/api/contributions', {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${token}` },
-  body: JSON.stringify({
-    groupId: 'group123',
-    amount: 50000,
-    paymentMethod: 'manual',
-    scheduledDate: Date.now(),
-    actualDate: Date.now()
-  })
-});
-🧪 Testing
-Running Tests
-bash
-# Run unit tests
-npm test
-
-# Run integration tests
-npm run test:integration
-
-# Run with coverage
-npm run test:coverage
-Test Coverage Goals
-Module	Target Coverage
-Trust Score Calculation	100%
-Authentication Flow	90%
-Contribution Logic	85%
-Group Management	85%
-API Endpoints	80%
-📁 Project Structure
-text
-circufi/
-├── packages/
-│   ├── shared/                 # Shared types and utilities
-│   │   ├── src/
-│   │   │   ├── types/         # TypeScript interfaces
-│   │   │   ├── constants/     # App constants
-│   │   │   └── utils/         # Shared utilities
-│   │   └── package.json
-│   │
-│   ├── backend/               # Node.js + Express server
-│   │   ├── src/
-│   │   │   ├── config/        # Firebase config
-│   │   │   ├── middleware/    # Auth, validation
-│   │   │   ├── routes/        # API endpoints
-│   │   │   ├── services/      # Business logic
-│   │   │   └── index.ts       # Entry point
-│   │   └── package.json
-│   │
-│   └── frontend/              # React SPA
-│       ├── src/
-│       │   ├── components/    # Reusable components
-│       │   ├── pages/         # Page components
-│       │   ├── stores/        # Zustand stores
-│       │   ├── services/      # API client
-│       │   └── App.tsx        # Main component
-│       └── package.json
-│
-├── docker-compose.yml
-├── Dockerfile
-└── package.json               # Root workspace config
-🔒 Security
-Authentication & Authorization
-JWT tokens with 7-day expiration
-
-Firebase Authentication integration
-
-Role-based access control (admin vs member)
-
-Rate limiting (100 requests/minute)
-
-Data Protection
-Phone numbers hashed in logs
-
-HTTPS enforced in production
-
-CORS configured for approved domains
-
-Firebase Security Rules for data isolation
-
-API Security
-Input validation with Zod schemas
-
-SQL injection prevention (Firestore)
-
-XSS protection via Helmet
-
-CSRF protection
-
-📊 Monitoring & Analytics
-Key Metrics Tracked
-Trust Performance
-
-Average Trust Score
-
-Trust Score Distribution
-
-High-Risk Members Count
-
-Trusted Members Count
-
-Contribution Metrics
-
-Total Contributions
-
-Completion Rate
-
-On-Time Payment Rate
-
-Missed Payment Rate
-
-Group Health
-
-Group Health Score
-
-Risk Flags
-
-Member Reliability Index
-
-🤝 Contributing
-We welcome contributions! Please see our Contributing Guide.
-
-Development Workflow
-bash
-# Fork the repository
-# Create a feature branch
-git checkout -b feature/amazing-feature
-
-# Make your changes
-# Run tests
-npm test
-
-# Commit your changes
-git commit -m 'Add amazing feature'
-
-# Push to the branch
-git push origin feature/amazing-feature
-
-# Open a Pull Request
-Coding Standards
-TypeScript strict mode enabled
-
-ESLint + Prettier for code formatting
-
-Conventional commits for commit messages
-
-80% test coverage required
-
-📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-🙏 Acknowledgments
-Traditional Osusu, Ajo, and Esusu systems that inspired this platform
-
-Anthropic for Claude AI API
-
-Firebase for scalable infrastructure
-
-All contributors and early adopters
-
-📞 Contact & Support
-Documentation: 
-
-Issues: GitHub Issues
-
-Discord: Join our community
-
-Email: 
-
-<div align="center">
-Built with ❤️ for financial inclusion in Africa
-
-Report Bug • Request Feature • Star on GitHub
-
-</div>
-This response is AI-generated, for reference only.
+**Built with:** ❤️ TypeScript • Express • Next.js • Firebase • Ollama

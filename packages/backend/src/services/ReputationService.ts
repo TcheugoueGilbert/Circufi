@@ -1,174 +1,275 @@
-// packages/backend/src/services/ReputationService.ts
-import { db } from '../config/firebase';
-import { 
-  User, Reputation, ReputationEvent, Contribution,
-  calculateTrustScore, calculateMembershipDurationScore,
-  calculatePenaltyScore, calculateOnTimeRate, calculateCompletionRate
-} from '@circufi/shared';
-import { v4 as uuidv4 } from 'uuid';
+/**
+ * Reputation and Trust Scoring Service
+ */
 
-export class ReputationService {
-  
-  static async calculateUserReputation(userId: string, groupId?: string): Promise<Reputation> {
-    // Get user data
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      throw new Error('User not found');
-    }
-    const user = userDoc.data() as User;
-    
-    // Get contributions
-    let contributionsQuery = db.collection('contributions')
-      .where('paidBy.userId', '==', userId);
-    
-    if (groupId) {
-      contributionsQuery = contributionsQuery.where('groupId', '==', groupId);
-    }
-    
-    const contributionsSnapshot = await contributionsQuery.get();
-    const contributions = contributionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Contribution));
-    
-    // Calculate metrics
-    const totalExpected = contributions.length;
-    const actualPayments = contributions.filter(c => c.status === 'completed').length;
-    const onTimePayments = contributions.filter(c => c.isOnTime && c.status === 'completed').length;
-    
-    const completionRate = calculateCompletionRate(totalExpected, actualPayments);
-    const onTimeRate = calculateOnTimeRate(actualPayments, onTimePayments);
-    const membershipDurationScore = calculateMembershipDurationScore(user.joinedAt, Date.now());
-    
-    const missedPayments = contributions.filter(c => c.status === 'failed').length;
-    const latePayments = contributions.filter(c => !c.isOnTime && c.status === 'completed').length;
-    const penaltyScore = calculatePenaltyScore(user.reputation?.flags || [], missedPayments, latePayments);
-    
-    const trustScore = calculateTrustScore(completionRate, onTimeRate, membershipDurationScore, penaltyScore);
-    
-    return {
-      totalPayments: actualPayments,
-      onTimeRate,
-      totalDisbursed: user.reputation?.totalDisbursed || 0,
-      trustScore,
-      flags: user.reputation?.flags || [],
-      completionRate,
-      membershipDurationScore,
-      penaltyScore
-    };
+import { User, Group, Contribution, ReputationEvent } from '../types';
+import { firebaseService } from './firebaseService';
+import { generateId } from '../utils/helpers';
+
+class ReputationService {
+  /**
+   * Calculate trust score for a user
+   * Formula: 50 (base) + (onTimeRate * 0.3) + (paymentCount * 2) + (flags * -5)
+   */
+  calculateTrustScore(user: User): number {
+    const { onTimeRate, totalPayments, flags } = user.reputation;
+
+    const onTimePoints = onTimeRate * 0.3;
+    const paymentPoints = Math.min(totalPayments, 20) * 2;
+    const flagPenalty = flags.length * -5;
+
+    let score = 50 + onTimePoints + paymentPoints + flagPenalty;
+
+    // Clamp between 0 and 100
+    return Math.max(0, Math.min(100, score));
   }
-  
-  static async updateReputationFromContribution(
-    contribution: Contribution, 
-    oldStatus?: string
+
+  /**
+   * Calculate group health score
+   * Formula: (memberAverageTrustScore * 0.6) + (paymentCompletionRate * 0.4)
+   */
+  async calculateGroupHealthScore(group: Group): Promise<number> {
+    const members = Object.keys(group.members).filter(
+      (userId) => group.members[userId].status === 'active'
+    );
+
+    if (members.length === 0) return 0;
+
+    // Get average trust score of all members
+    let totalTrustScore = 0;
+    for (const userId of members) {
+      const user = await firebaseService.getUser(userId);
+      if (user) {
+        totalTrustScore += user.reputation.trustScore;
+      }
+    }
+    const memberAverageTrustScore = totalTrustScore / members.length;
+
+    // Calculate payment completion rate
+    const contributions = await firebaseService.getGroupContributions(group.id);
+    const expectedContributions = members.length * group.stats.completedCycles;
+    const completedContributions = contributions.filter(
+      (c) => c.status === 'completed'
+    ).length;
+    const paymentCompletionRate =
+      expectedContributions === 0
+        ? 100
+        : (completedContributions / expectedContributions) * 100;
+
+    const healthScore =
+      memberAverageTrustScore * 0.6 + Math.min(paymentCompletionRate, 100) * 0.4;
+
+    return Math.round(healthScore);
+  }
+
+  /**
+   * Record a reputation event and update user score
+   */
+  async recordReputationEvent(
+    userId: string,
+    eventType: ReputationEvent['eventType'],
+    reason: string,
+    groupId?: string
   ): Promise<void> {
-    const userId = contribution.paidBy.userId;
-    const groupId = contribution.groupId;
-    
-    // Get current reputation
-    const userDoc = await db.collection('users').doc(userId).get();
-    const user = userDoc.data() as User;
-    
-    // Determine event type based on status change
-    let eventType: ReputationEvent['eventType'] = 'payment_on_time';
+    const user = await firebaseService.getUser(userId);
+    if (!user) {
+      throw new Error('USER_NOT_FOUND');
+    }
+
+    // Determine impact based on event type
     let impact = 0;
-    
-    if (contribution.status === 'completed') {
-      if (contribution.isOnTime) {
-        eventType = 'payment_on_time';
+    let flagToAdd: string | null = null;
+
+    switch (eventType) {
+      case 'payment_on_time':
         impact = 5;
-      } else {
-        eventType = 'payment_late';
-        impact = -2;
-      }
-    } else if (contribution.status === 'failed') {
-      eventType = 'payment_missed';
-      impact = -10;
+        break;
+      case 'payment_late':
+        impact = -3;
+        flagToAdd = reason; // e.g., "late_by_3_days"
+        break;
+      case 'payment_missed':
+        impact = -10;
+        flagToAdd = 'missed_payment';
+        break;
+      case 'dispute_resolved':
+        impact = 2;
+        break;
+      case 'verified':
+        impact = 3;
+        break;
+      case 'flagged':
+        impact = -5;
+        flagToAdd = reason;
+        break;
+      default:
+        impact = 0;
     }
-    
-    // Update flags
-    const flags = [...(user.reputation?.flags || [])];
-    if (!contribution.isOnTime && contribution.status === 'completed') {
-      const lateDays = Math.floor((contribution.actualDate - contribution.scheduledDate) / (1000 * 60 * 60 * 24));
-      if (!flags.includes(`late_by_${lateDays}_days`)) {
-        flags.push(`late_by_${lateDays}_days`);
-      }
-    }
-    
-    // Recalculate full reputation
-    const newReputation = await this.calculateUserReputation(userId);
-    
+
     // Create reputation event
     const event: ReputationEvent = {
-      id: uuidv4(),
+      id: generateId(),
       userId,
       groupId,
       eventType,
       impact,
-      reason: `Contribution ${contribution.status} - ${contribution.isOnTime ? 'on time' : 'late'}`,
-      oldScore: user.reputation?.trustScore,
-      newScore: newReputation.trustScore,
-      timestamp: Date.now()
+      reason,
+      timestamp: Date.now(),
     };
-    
-    // Save updates
-    await db.collection('users').doc(userId).update({
-      reputation: newReputation,
-      lastActive: Date.now()
+
+    await firebaseService.createReputationEvent(userId, event);
+
+    // Update user reputation
+    const updatedReputation = { ...user.reputation };
+    updatedReputation.trustScore = this.calculateTrustScore(user);
+
+    if (flagToAdd && !updatedReputation.flags.includes(flagToAdd)) {
+      updatedReputation.flags.push(flagToAdd);
+    }
+
+    await firebaseService.updateUser(userId, {
+      reputation: updatedReputation,
+      lastActive: Date.now(),
     });
-    
-    await db.collection('reputationEvents').doc(event.id).set(event);
-    
-    // Update group health score
-    await this.updateGroupHealthScore(groupId);
   }
-  
-  static async updateGroupHealthScore(groupId: string): Promise<void> {
-    const groupDoc = await db.collection('groups').doc(groupId).get();
-    if (!groupDoc.exists) return;
-    
-    const group = groupDoc.data();
-    const members = Object.keys(group.members);
-    
-    // Get all member reputations
-    let totalTrustScore = 0;
-    let totalMembers = 0;
-    
-    for (const memberId of members) {
-      const userDoc = await db.collection('users').doc(memberId).get();
-      if (userDoc.exists) {
-        const user = userDoc.data() as User;
-        totalTrustScore += user.reputation?.trustScore || 50;
-        totalMembers++;
+
+  /**
+   * Update contribution counts when a payment is completed
+   */
+  async updateContributionMetrics(userId: string, groupId: string): Promise<void> {
+    const user = await firebaseService.getUser(userId);
+    if (!user) {
+      throw new Error('USER_NOT_FOUND');
+    }
+
+    const contributions = await firebaseService.getUserContributions(groupId, userId);
+    const completedContributions = contributions.filter(
+      (c) => c.status === 'completed'
+    );
+
+    if (completedContributions.length === 0) return;
+
+    const onTimeCount = completedContributions.filter((c) => c.isOnTime).length;
+    const onTimeRate = (onTimeCount / completedContributions.length) * 100;
+
+    // Check if user received disbursement
+    const group = await firebaseService.getGroup(groupId);
+    if (!group) return;
+
+    let totalDisbursed = user.reputation.totalDisbursed;
+    if (
+      group.rotation.currentBeneficiary === userId &&
+      completedContributions.length === Object.keys(group.members).length
+    ) {
+      totalDisbursed++;
+    }
+
+    await firebaseService.updateUser(userId, {
+      reputation: {
+        ...user.reputation,
+        totalPayments: completedContributions.length,
+        onTimeRate,
+        totalDisbursed,
+      },
+    });
+  }
+
+  /**
+   * Check if payment is on time
+   */
+  isPaymentOnTime(scheduledDate: number, actualDate: number): boolean {
+    return actualDate <= scheduledDate;
+  }
+
+  /**
+   * Check if payment is late and return days late
+   */
+  getDaysLate(scheduledDate: number, actualDate: number): number {
+    const daysMs = actualDate - scheduledDate;
+    const days = Math.floor(daysMs / (1000 * 60 * 60 * 24));
+    return Math.max(0, days);
+  }
+
+  /**
+   * Get member reliability scores for a group
+   */
+  async getMemberReliability(
+    groupId: string
+  ): Promise<Record<string, number>> {
+    const group = await firebaseService.getGroup(groupId);
+    if (!group) {
+      throw new Error('GROUP_NOT_FOUND');
+    }
+
+    const reliability: Record<string, number> = {};
+    const members = Object.keys(group.members).filter(
+      (userId) => group.members[userId].status === 'active'
+    );
+
+    for (const userId of members) {
+      const user = await firebaseService.getUser(userId);
+      if (user) {
+        reliability[userId] = user.reputation.trustScore;
       }
     }
-    
-    const averageTrustScore = totalMembers > 0 ? totalTrustScore / totalMembers : 0;
-    
-    // Calculate payment completion rate
-    const contributionsSnapshot = await db.collection('contributions')
-      .where('groupId', '==', groupId)
-      .get();
-    
-    const contributions = contributionsSnapshot.docs.map(doc => doc.data() as Contribution);
-    const expectedContributions = members.length * (group.rotation.completedCycles + 1);
-    const actualContributions = contributions.filter(c => c.status === 'completed').length;
-    const paymentCompletionRate = expectedContributions > 0 ? (actualContributions / expectedContributions) * 100 : 100;
-    
-    const healthScore = (averageTrustScore * 0.6) + (paymentCompletionRate * 0.4);
-    
-    await db.collection('groups').doc(groupId).update({
-      'stats.healthScore': healthScore,
-      'stats.memberAverageTrustScore': averageTrustScore,
-      'stats.paymentCompletionRate': paymentCompletionRate,
-      updatedAt: Date.now()
-    });
+
+    return reliability;
   }
-  
-  static async getReputationEvents(userId: string, limit = 20): Promise<ReputationEvent[]> {
-    const eventsSnapshot = await db.collection('reputationEvents')
-      .where('userId', '==', userId)
-      .orderBy('timestamp', 'desc')
-      .limit(limit)
-      .get();
-    
-    return eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReputationEvent));
+
+  /**
+   * Get risk flags for a group
+   */
+  async getGroupRiskFlags(groupId: string): Promise<string[]> {
+    const group = await firebaseService.getGroup(groupId);
+    if (!group) {
+      throw new Error('GROUP_NOT_FOUND');
+    }
+
+    const flags: string[] = [];
+    const members = Object.keys(group.members).filter(
+      (userId) => group.members[userId].status === 'active'
+    );
+
+    // Check for high variance in payments
+    const contributions = await firebaseService.getGroupContributions(groupId);
+    if (contributions.length > 0) {
+      const amounts = contributions.map((c) => c.amount);
+      const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+      const variance =
+        amounts.reduce((sum, amount) => sum + Math.pow(amount - avg, 2), 0) /
+        amounts.length;
+      const stdDev = Math.sqrt(variance);
+
+      if (stdDev > avg * 0.2) {
+        flags.push('high_variance_in_payments');
+      }
+    }
+
+    // Check if admin is missing cycles
+    const admin = group.members[group.admin.userId];
+    if (admin && admin.status === 'active') {
+      const adminContributions = await firebaseService.getUserContributions(
+        groupId,
+        group.admin.userId
+      );
+      const expectedCycles = group.stats.completedCycles;
+      if (adminContributions.length < expectedCycles * 0.8) {
+        flags.push('admin_missing_cycles');
+      }
+    }
+
+    // Check for members with low trust scores
+    const lowTrustMembers = members.filter(async (userId) => {
+      const user = await firebaseService.getUser(userId);
+      return user && user.reputation.trustScore < 50;
+    });
+
+    if (lowTrustMembers.length > members.length * 0.3) {
+      flags.push('multiple_low_trust_members');
+    }
+
+    return flags;
   }
 }
+
+export const reputationService = new ReputationService();

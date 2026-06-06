@@ -1,58 +1,85 @@
-// packages/backend/src/middleware/auth.ts
+/**
+ * Authentication middleware
+ */
+
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { auth } from '../config/firebase';
+import { authService } from '../services/authService';
 
 export interface AuthRequest extends Request {
   userId?: string;
   user?: any;
 }
 
-export async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'No token provided' });
-  }
-  
+/**
+ * Verify JWT token and attach user ID to request
+ */
+export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    // Verify Firebase token
-    const decodedToken = await auth.verifyIdToken(token);
-    req.userId = decodedToken.uid;
-    req.user = decodedToken;
-    next();
-  } catch (error) {
-    // Try JWT verification as fallback
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'MISSING_TOKEN',
+          message: 'Missing or invalid authorization header',
+          statusCode: 401,
+        },
+      });
+    }
+
+    const token = authHeader.substring(7);
+
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+      const decoded = authService.verifyToken(token);
       req.userId = decoded.userId;
       next();
-    } catch (jwtError) {
-      return res.status(403).json({ success: false, error: 'Invalid token' });
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'Invalid or expired token',
+          statusCode: 401,
+        },
+      });
     }
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'AUTH_ERROR',
+        message: 'Authentication error',
+        statusCode: 500,
+      },
+    });
   }
 }
 
-export function requireGroupAccess(groupId: string) {
-  return async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const groupDoc = await db.collection('groups').doc(groupId).get();
-      if (!groupDoc.exists) {
-        return res.status(404).json({ success: false, error: 'Group not found' });
+/**
+ * Optional authentication - doesn't fail if no token, but sets userId if token is valid
+ */
+export async function optionalAuthMiddleware(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+
+      try {
+        const decoded = authService.verifyToken(token);
+        req.userId = decoded.userId;
+      } catch (error) {
+        // Token invalid but that's okay - continue without auth
       }
-      
-      const group = groupDoc.data();
-      const isMember = group?.members?.[req.userId!] !== undefined;
-      const isAdmin = group?.admin?.userId === req.userId;
-      
-      if (!isMember && !isAdmin) {
-        return res.status(403).json({ success: false, error: 'Access denied' });
-      }
-      
-      next();
-    } catch (error) {
-      res.status(500).json({ success: false, error: 'Error checking group access' });
     }
-  };
+
+    next();
+  } catch (error) {
+    next();
+  }
 }

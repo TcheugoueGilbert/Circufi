@@ -1,0 +1,41 @@
+// Node dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+// Environment
+.env
+.env.local
+.env.*.local
+
+// Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+// IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+// Testing
+coverage/
+.nyc_output/
+jest-coverage/
+
+// Logs
+logs/
+*.log
+
+// Firebase
+firebase-debug.log
+
+// Miscellaneous
+temp/
+tmp/
+*.bak

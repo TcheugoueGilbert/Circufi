@@ -1,64 +1,101 @@
-// packages/backend/src/index.ts
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
-import { initializeFirebase } from './config/firebase';
-import authRoutes from './routes/auth';
-import groupRoutes from './routes/groups';
-import contributionRoutes from './routes/contributions';
-import reputationRoutes from './routes/reputation';
-import chatRoutes from './routes/chat';
+/**
+ * Server entry point
+ */
 
-dotenv.config();
+import 'dotenv/config';
+import app from './app';
+import { ollamaAIService } from './services/ollamaAIService';
 
-const app = express();
 const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Initialize Firebase
-initializeFirebase();
+const server = app.listen(PORT, async () => {
+  console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║         Digital Osusu - Backend Server Started           ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
 
-// Middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
-app.use(express.json());
+🚀 Server is running on port ${PORT}
+📡 Environment: ${NODE_ENV}
+🔗 Base URL: http://localhost:${PORT}/api/v1
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+✅ Available Endpoints:
+  - POST   /api/v1/auth/register          - Register new user
+  - POST   /api/v1/auth/verify            - Verify phone with OTP
+  - POST   /api/v1/auth/resend            - Resend verification code
+  - GET    /api/v1/users/:userId          - Get user profile
+  - PUT    /api/v1/users/:userId          - Update user profile
+  - POST   /api/v1/groups                 - Create new group
+  - GET    /api/v1/groups                 - List user's groups
+  - GET    /api/v1/groups/:groupId        - Get group details
+  - PUT    /api/v1/groups/:groupId        - Update group
+  - POST   /api/v1/groups/:groupId/members         - Add member
+  - DELETE /api/v1/groups/:groupId/members/:userId - Remove member
+  - GET    /api/v1/groups/:groupId/health          - Group health score
+  - GET    /api/v1/groups/:groupId/rotation        - Rotation details
+  - POST   /api/v1/contributions                    - Log contribution
+  - GET    /api/v1/contributions/:groupId           - Get contributions
+  - PUT    /api/v1/contributions/:id                - Update contribution
+  - POST   /api/v1/contributions/:id/verify         - Verify contribution
+  - GET    /api/v1/reputation/:userId               - Get reputation
+  - GET    /api/v1/reputation/:userId/events        - Get reputation events
+  - POST   /api/v1/chat/message                      - Send chat message
+  - GET    /api/v1/chat/sessions                     - List chat sessions
+  - GET    /api/v1/chat/sessions/:id                 - Get chat session
+  - GET    /api/v1/chat/health                       - Check AI service
+
+🔌 AI Integration:
+  - LLM Provider: Ollama (${process.env.OLLAMA_MODEL || 'mistral'})
+  - API URL: ${process.env.OLLAMA_API_URL || 'http://localhost:11434'}
+  
+  `);
+
+  // Check Ollama connection
+  setTimeout(async () => {
+    try {
+      const isHealthy = await ollamaAIService.healthCheck();
+      if (isHealthy) {
+        console.log('✅ Ollama AI service is healthy');
+        const models = await ollamaAIService.getAvailableModels();
+        console.log(`📚 Available models: ${models.join(', ')}`);
+      } else {
+        console.warn('⚠️  Ollama AI service is not available yet');
+        console.warn('   Make sure Ollama is running: ollama serve');
+      }
+    } catch (error) {
+      console.warn('⚠️  Could not connect to Ollama');
+      console.warn('   To use AI features, start Ollama with: ollama serve');
+    }
+  }, 1000);
 });
-app.use('/api/', limiter);
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/groups', groupRoutes);
-app.use('/api/contributions', contributionRoutes);
-app.use('/api/reputation', reputationRoutes);
-app.use('/api/chat', chatRoutes);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
-});
-
-// Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    error: err.message || 'Internal server error',
-    statusCode: err.status || 500
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`CircuFi backend running on port ${PORT}`);
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
 
-export default app;
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+export default server;
