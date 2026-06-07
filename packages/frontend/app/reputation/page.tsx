@@ -64,7 +64,7 @@ export default function ReputationPage() {
                 setUser(userRes.data.data)
             }
             if (eventsRes.data.success) {
-                setEvents(eventsRes.data.data || [])
+                setEvents(eventsRes.data.data.recentEvents || [])
             }
         } catch (err) {
             console.error('Failed to load reputation:', err)

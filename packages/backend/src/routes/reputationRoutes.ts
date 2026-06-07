@@ -35,6 +35,10 @@ router.get('/:userId', async (req: AuthRequest, res: Response, next: NextFunctio
     // Recalculate trust score
     const updatedTrustScore = reputationService.calculateTrustScore(user);
 
+    // Get recent events
+    const events = await firebaseService.getUserReputationEvents(userId);
+    const recentEvents = events.slice(0, 5);
+
     res.status(200).json({
       success: true,
       data: {
@@ -46,6 +50,7 @@ router.get('/:userId', async (req: AuthRequest, res: Response, next: NextFunctio
         totalDisbursed: user.reputation.totalDisbursed,
         flags: user.reputation.flags,
         joinedAt: user.joinedAt,
+        recentEvents: recentEvents // Include events here
       },
     });
   } catch (error) {

@@ -490,17 +490,55 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response, next: Ne
 
     res.status(200).json({
       success: true,
+      data: groups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        memberCount: Object.keys(g.members).length,
+        contributionAmount: g.rules.contributionAmount,
+        currency: g.rules.currency,
+        frequency: g.rules.frequency,
+        healthScore: g.stats.healthScore,
+        admin: g.admin,
+        rules: g.rules,
+        members: g.members,
+        rotation: g.rotation,
+        stats: g.stats
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /groups/code/:code
+ * Get group by invite code
+ */
+router.get('/code/:code', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+
+    // In a real app, we might store invite codes in a separate collection
+    // For MVP, we'll search by the end of the ID or just use the ID as the code
+    const groups = await firebaseService.getAllGroups();
+    const group = groups.find(g => g.id.endsWith(code.toUpperCase()) || g.id === code);
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'GROUP_NOT_FOUND',
+          message: 'Circle not found. Check the code and try again.',
+          statusCode: 404,
+        },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
       data: {
-        groups: groups.map((g) => ({
-          id: g.id,
-          name: g.name,
-          memberCount: Object.keys(g.members).length,
-          contribution Amount: g.rules.contributionAmount,
-          currency: g.rules.currency,
-          frequency: g.rules.frequency,
-          healthScore: g.stats.healthScore,
-        })),
-        count: groups.length,
+        ...group,
+        memberCount: Object.keys(group.members).length,
       },
     });
   } catch (error) {

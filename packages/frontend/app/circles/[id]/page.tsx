@@ -195,7 +195,7 @@ export default function CircleDetailPage() {
             const [groupRes, membersRes, contributionsRes] = await Promise.all([
                 api.get(`/v1/groups/${id}`),
                 api.get(`/v1/groups/${id}/members`),
-                api.get(`/v1/groups/${id}/contributions`)
+                api.get(`/v1/contributions/${id}`)
             ])
 
             if (groupRes.data.success) {

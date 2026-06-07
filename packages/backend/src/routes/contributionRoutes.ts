@@ -194,37 +194,46 @@ router.get('/:groupId', async (req: AuthRequest, res: Response, next: NextFuncti
 
 /**
  * GET /contributions/user/:userId
- * Get contributions by user in a specific group
+ * Get contributions by user (optionally filtered by groupId)
  */
 router.get('/user/:userId', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
     const { groupId } = req.query as { groupId?: string };
 
-    if (!groupId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'MISSING_PARAMETER',
-          message: 'groupId query parameter is required',
-          statusCode: 400,
-        },
-      });
-    }
+    let contributions: Contribution[] = [];
 
-    const contributions = await firebaseService.getUserContributions(
-      groupId as string,
-      userId
-    );
+    if (groupId) {
+      const group = await firebaseService.getGroup(groupId as string);
+      const groupContribs = await firebaseService.getUserContributions(
+        groupId as string,
+        userId
+      );
+      contributions = groupContribs.map(c => ({
+        ...c,
+        groupName: group?.name || 'Unknown Group'
+      }));
+    } else {
+      // Fetch from all groups user belongs to
+      const user = await firebaseService.getUser(userId);
+      if (user) {
+        for (const gid of user.groupIds) {
+          const group = await firebaseService.getGroup(gid);
+          const groupContribs = await firebaseService.getUserContributions(gid, userId);
+          const mapped = groupContribs.map(c => ({
+            ...c,
+            groupName: group?.name || 'Unknown Group'
+          }));
+          contributions = [...contributions, ...mapped];
+        }
+      }
+    }
 
     const sorted = contributions.sort((a, b) => b.actualDate - a.actualDate);
 
     res.status(200).json({
       success: true,
-      data: {
-        contributions: sorted,
-        count: sorted.length,
-      },
+      data: sorted, // Return array directly as expected by frontend
     });
   } catch (error) {
     next(error);
