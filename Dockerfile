@@ -28,9 +28,9 @@ COPY --from=builder /app/packages/backend/dist ./backend/dist
 COPY --from=builder /app/packages/backend/node_modules ./backend/node_modules
 COPY --from=builder /app/packages/shared/dist ./shared/dist
 
-# Copy frontend build
+# Copy frontend build  
 COPY --from=builder /app/packages/frontend/dist ./frontend/dist
 
 EXPOSE 5000
 
-CMD ["node", "backend/dist/index.js"]
+CMD ["node", "backend/dist/index.js"] 

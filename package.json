@@ -15,10 +15,10 @@
     "build:shared": "cd packages/shared && npm run build",
     "build:backend": "cd packages/backend && npm run build",
     "build:frontend": "cd packages/frontend && npm run build",
-    "setup": "npm install && npm run setup:shared && npm run setup:backend && npm run setup:frontend",
-    "setup:shared": "cd packages/shared && npm install",
-    "setup:backend": "cd packages/backend && npm install",
-    "setup:frontend": "cd packages/frontend && npm install"
+    "setup": "npm install",
+    "setup:shared": "npm install -w @circufi/shared",
+    "setup:backend": "npm install -w osusu-backend",
+    "setup:frontend": "npm install -w frontend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

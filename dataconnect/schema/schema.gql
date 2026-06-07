@@ -1,0 +1,49 @@
+type User @table {
+  fullName: String!
+  phoneNumber: String!
+  joinDate: Timestamp!
+  email: String
+  profilePhotoUrl: String
+  creditScore: Int
+}
+
+type Group @table {
+  name: String!
+  creationDate: Timestamp!
+  cycleDuration: Int!
+  maxMembers: Int!
+  description: String
+  targetGoalAmount: Float
+}
+
+type Membership @table {
+  user: User!
+  group: Group!
+  role: String!
+  status: String!
+  totalContributionToDate: Float
+}
+
+type Contribution @table {
+  membership: Membership!
+  amount: Float!
+  date: Timestamp!
+  paymentMethod: String
+  aiVerificationStatus: String
+}
+
+type Payout @table {
+  membership: Membership!
+  amount: Float!
+  payoutDate: Timestamp!
+  purpose: String
+  status: String
+}
+
+type Task @table {
+  group: Group!
+  title: String!
+  dueDate: Timestamp!
+  user: User
+  status: String
+}

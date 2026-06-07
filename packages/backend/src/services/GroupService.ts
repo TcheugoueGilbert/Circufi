@@ -2,7 +2,7 @@
 import { db } from '../config/firebase';
 import { Group, CreateGroupRequest, GroupMember, Rotation, GroupStats, User } from '@circufi/shared';
 import { v4 as uuidv4 } from 'uuid';
-import { ReputationService } from './ReputationService';
+import { reputationService } from './reputationService';
 
 export class GroupService {
   
@@ -63,8 +63,8 @@ export class GroupService {
     
     // Update user's groups
     await db.collection('users').doc(adminUserId).update({
-      groupIds: admin.admin.groupIds.concat([groupId]),
-      adminGroupIds: admin.admin.adminGroupIds.concat([groupId])
+      groupIds: (admin.groupIds || []).concat([groupId]),
+      adminGroupIds: (admin.adminGroupIds || []).concat([groupId])
     });
     
     return group;
@@ -127,7 +127,7 @@ export class GroupService {
     });
     
     // Update group health score
-    await ReputationService.updateGroupHealthScore(groupId);
+    await reputationService.updateGroupHealthScore(groupId);
     
     return user;
   }

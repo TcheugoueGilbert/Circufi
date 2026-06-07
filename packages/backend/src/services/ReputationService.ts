@@ -259,10 +259,13 @@ class ReputationService {
     }
 
     // Check for members with low trust scores
-    const lowTrustMembers = members.filter(async (userId) => {
+    const lowTrustMembers: string[] = [];
+    for (const userId of members) {
       const user = await firebaseService.getUser(userId);
-      return user && user.reputation.trustScore < 50;
-    });
+      if (user && user.reputation.trustScore < 50) {
+        lowTrustMembers.push(userId);
+      }
+    }
 
     if (lowTrustMembers.length > members.length * 0.3) {
       flags.push('multiple_low_trust_members');

@@ -39,7 +39,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 
     const result = await authService.register(body.phoneNumber, body.displayName, body.email);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       data: {
         userId: result.userId,
@@ -59,7 +59,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
       });
     }
 
-    next(error);
+    return next(error);
   }
 });
 
@@ -73,7 +73,7 @@ router.post('/verify', async (req: Request, res: Response, next: NextFunction) =
 
     const result = await authService.verify(body.phoneNumber, body.code);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         userId: result.userId,
@@ -99,7 +99,7 @@ router.post('/verify', async (req: Request, res: Response, next: NextFunction) =
       });
     }
 
-    next(error);
+    return next(error);
   }
 });
 
@@ -113,7 +113,7 @@ router.post('/resend', async (req: Request, res: Response, next: NextFunction) =
 
     await authService.resendVerificationCode(body.phoneNumber);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         message: 'Verification code sent to phone.',
@@ -131,7 +131,7 @@ router.post('/resend', async (req: Request, res: Response, next: NextFunction) =
       });
     }
 
-    next(error);
+    return next(error);
   }
 });
 

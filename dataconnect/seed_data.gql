@@ -1,0 +1,34 @@
+mutation SeedData @transaction {
+  user_insertMany(data: [
+    {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      fullName: "Alice Smith",
+      phoneNumber: "1234567890",
+      joinDate: "2023-01-01T00:00:00Z"
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      fullName: "Bob Jones",
+      phoneNumber: "0987654321",
+      joinDate: "2023-02-01T00:00:00Z"
+    }
+  ])
+  group_insertMany(data: [
+    {
+      id: "660e8400-e29b-41d4-a716-446655440000",
+      name: "Savings Circle",
+      creationDate: "2023-03-01T00:00:00Z",
+      cycleDuration: 30,
+      maxMembers: 10
+    }
+  ])
+  membership_insertMany(data: [
+    {
+      id: "770e8400-e29b-41d4-a716-446655440000",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
+      groupId: "660e8400-e29b-41d4-a716-446655440000",
+      role: "admin",
+      status: "active"
+    }
+  ])
+}

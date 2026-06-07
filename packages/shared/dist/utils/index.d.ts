@@ -1,0 +1,10 @@
+import { Reputation, User } from '../types';
+export declare function calculateTrustScore(completionRate: number, onTimeRate: number, membershipDurationScore: number, penaltyScore: number): number;
+export declare function calculateMembershipDurationScore(joinedAt: number, currentTime: number): number;
+export declare function calculatePenaltyScore(flags: string[], missedPayments: number, latePayments: number): number;
+export declare function calculateOnTimeRate(totalPayments: number, onTimePayments: number): number;
+export declare function calculateCompletionRate(expectedPayments: number, actualPayments: number): number;
+export declare function getRiskCategory(trustScore: number): string;
+export declare function calculateGroupHealthScore(averageTrustScore: number, paymentCompletionRate: number): number;
+export declare function getGroupRiskLevel(healthScore: number): 'low' | 'medium' | 'high';
+export declare function calculateReputationFromUser(user: User, contributions: any[]): Reputation;
