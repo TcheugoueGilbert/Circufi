@@ -61,7 +61,6 @@ router.post('/message', authMiddleware, async (req: AuthRequest, res: Response, 
         session = await ollamaAIService.continueChat(userId, body.sessionId, body.message);
       } else {
         session = await ollamaAIService.chat(userId, body.groupId, body.message);
-        await firebaseService.createChatSession(userId, session);
       }
     } catch (error) {
       console.error('AI Service Error:', error);
@@ -74,12 +73,6 @@ router.post('/message', authMiddleware, async (req: AuthRequest, res: Response, 
         },
       });
     }
-
-    // Save session to Firebase
-    await firebaseService.updateChatSession(userId, session.id, {
-      messages: session.messages,
-      updatedAt: session.updatedAt,
-    });
 
     res.status(200).json({
       success: true,
@@ -112,7 +105,10 @@ router.get('/sessions', authMiddleware, async (req: AuthRequest, res: Response, 
   try {
     const userId = req.userId!;
 
-    const sessions = await firebaseService.getUserChatSessions(userId);
+    const { groupId } = req.query as { groupId?: string };
+
+    const allSessions = await firebaseService.getUserChatSessions(userId);
+    const sessions = groupId ? allSessions.filter((s) => s.groupId === groupId) : allSessions;
 
     res.status(200).json({
       success: true,

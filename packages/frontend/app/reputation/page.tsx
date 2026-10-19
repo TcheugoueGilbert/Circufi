@@ -135,7 +135,7 @@ export default function ReputationPage() {
                         { label: 'Total payments',  value: user.reputation.totalPayments },
                         { label: 'On-time rate',    value: `${Math.round(user.reputation.onTimeRate)}%` },
                         { label: 'Trust score',     value: user.reputation.trustScore },
-                        { label: 'Total disbursed', value: `₦${user.reputation.totalDisbursed.toLocaleString()}` },
+                        { label: 'Payouts received', value: user.reputation.totalDisbursed },
                     ].map((s, i) => (
                         <div key={i} className="bg-[#F7F8FA] rounded-xl p-3 text-center border border-[#E8EAF0]">
                             <p className="text-xl font-bold text-navy">{s.value}</p>

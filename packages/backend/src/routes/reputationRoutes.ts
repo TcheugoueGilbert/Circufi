@@ -15,7 +15,7 @@ const router = Router();
  * GET /reputation/:userId
  * Get user's reputation profile
  */
-router.get('/:userId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.get('/:userId', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
 
@@ -62,10 +62,10 @@ router.get('/:userId', async (req: AuthRequest, res: Response, next: NextFunctio
  * GET /reputation/:userId/events
  * Get user's recent reputation events
  */
-router.get('/:userId/events', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.get('/:userId/events', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
-    const { limit = 10 } = req.query as { limit?: string };
+    const { limit = '10' } = req.query as { limit?: string };
 
     const user = await firebaseService.getUser(userId);
 
@@ -81,7 +81,8 @@ router.get('/:userId/events', async (req: AuthRequest, res: Response, next: Next
     }
 
     const events = await firebaseService.getUserReputationEvents(userId);
-    const recentEvents = events.slice(0, parseInt(limit || '10', 10));
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
+    const recentEvents = events.slice(0, parsedLimit);
 
     res.status(200).json({
       success: true,

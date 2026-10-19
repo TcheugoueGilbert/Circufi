@@ -16,7 +16,7 @@ interface RotationMember {
 
 interface RotationData {
   cycle: number
-  currentBeneficiary: string
+  currentBeneficiary: { userId: string; displayName: string }
   currentBeneficiaryIndex: number
   order: string[]
   members: RotationMember[]
@@ -144,7 +144,7 @@ export default function CircleRotationPage() {
           <h2 className="text-lg font-semibold mb-4">Rotation Order</h2>
           <div className="space-y-3">
             {rotation.members.map((member, index) => {
-              const isCurrent = member.userId === rotation.currentBeneficiary
+              const isCurrent = member.userId === rotation.currentBeneficiary.userId
               const isPast = member.hasBenefited && !isCurrent
               const isFuture = !member.hasBenefited && !isCurrent
 

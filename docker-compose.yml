@@ -1,0 +1,35 @@
+# docker compose up --build
+# Needs packages/backend/.env (copy from .env.example and fill in the Firebase + JWT values).
+services:
+  api:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    env_file: packages/backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      CORS_ORIGIN: http://localhost:3000
+      OLLAMA_API_URL: http://ollama:11434
+    ports: ["5000:5000"]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000/api
+    ports: ["3000:3000"]
+    depends_on: [api]
+    restart: unless-stopped
+
+  # Optional: local LLM for the AI assistant. Run `docker compose exec ollama ollama pull mistral` once.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    volumes: [ollama:/root/.ollama]
+    ports: ["11434:11434"]
+
+volumes:
+  ollama:

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Users, Clock } from 'lucide-react'
+import { ArrowLeft, Check, Users } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, Avatar, AvatarStack, ProgressBar, Badge } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
@@ -20,16 +20,7 @@ interface Group {
         maxMembers?: number
         minTrustScore?: number
     }
-    members: {
-        [userId: string]: {
-            joinedAt: number
-            status: string
-            role: string
-        }
-    }
-    rotation: {
-        cycle: number
-    }
+    memberCount: number
     stats: {
         healthScore: number
     }
@@ -76,9 +67,7 @@ export default function JoinCirclePage() {
         setLoading(true)
         setError('')
         try {
-            const response = await api.post(`/v1/groups/${group.id}/members`, {
-                userId: user.id
-            })
+            const response = await api.post(`/v1/groups/${group.id}/join`)
 
             if (response.data.success) {
                 setRequested(true)
@@ -97,28 +86,26 @@ export default function JoinCirclePage() {
         <AppShell>
             <div className="flex flex-col items-center justify-center py-16 text-center max-w-sm mx-auto">
                 <div className="w-16 h-16 rounded-full bg-teal-light flex items-center justify-center mb-5">
-                    <Clock size={28} className="text-teal-mid" />
+                    <Check size={28} className="text-teal-mid" />
                 </div>
-                <h2 className="text-xl font-bold text-navy mb-2">Request sent!</h2>
+                <h2 className="text-xl font-bold text-navy mb-2">You're in!</h2>
                 <p className="text-sm text-[#8A91A0] mb-6 leading-relaxed">
-                    {group.admin.name} has been notified. You'll receive a notification once approved.
-                </p>
+                    You have joined {group.name}. {group.admin.name} has been notified and you now appear in the rotation.</p>
                 <div className="bg-[#F7F8FA] rounded-xl border border-[#E8EAF0] px-5 py-4 w-full mb-6 text-left">
                     <p className="text-sm font-semibold text-navy">{group.name}</p>
-                    <p className="text-xs text-[#8A91A0] mt-1">Waiting for admin approval</p>
                     <div className="flex items-center gap-1.5 mt-2">
-                        <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                        <span className="text-xs text-amber-600 font-medium">Pending</span>
+                        <div className="w-2 h-2 rounded-full bg-teal" />
+                        <span className="text-xs text-teal-mid font-medium">Member</span>
                     </div>
                 </div>
-                <Button fullWidth variant="secondary" onClick={() => router.push('/dashboard')}>
-                    Back to dashboard
+                <Button fullWidth onClick={() => router.push(`/circles/${group.id}`)}>
+                    Open circle
                 </Button>
             </div>
         </AppShell>
     )
 
-    const memberCount = group ? Object.keys(group.members).length : 0
+    const memberCount = group?.memberCount ?? 0
     const maxMembers = group?.rules.maxMembers || 8
 
     return (
@@ -132,7 +119,7 @@ export default function JoinCirclePage() {
 
             <h1 className="text-xl font-bold text-navy tracking-tight mb-1">Join a circle</h1>
             <p className="text-sm text-[#8A91A0] mb-6">
-                Enter the 6-character code from your organiser
+                Enter the invite code from the circle admin (for example OSU-4X7K)
             </p>
 
             <div className="flex flex-col gap-4 max-w-md">
@@ -186,7 +173,7 @@ export default function JoinCirclePage() {
                             {[
                                 { label: 'Contribution', value: `${formatNaira(group.rules.contributionAmount)} / ${group.rules.frequency}` },
                                 { label: 'Members', value: `${memberCount} / ${maxMembers} spots` },
-                                { label: 'Current cycle', value: `Cycle ${group.rotation.cycle}` },
+                                { label: 'Minimum trust score', value: `${group.rules.minTrustScore || 0}` },
                                 { label: 'Circle health', value: `${group.stats.healthScore}%` },
                             ].map((s, i) => (
                                 <div key={i} className="bg-[#F7F8FA] rounded-lg p-2.5">
@@ -196,19 +183,8 @@ export default function JoinCirclePage() {
                             ))}
                         </div>
 
-                        {/* Eligibility */}
-                        <div className="flex items-center gap-2 bg-teal-light rounded-lg px-3 py-2.5 mb-4">
-                            <Check size={13} className="text-teal-mid flex-shrink-0" />
-                            <div>
-                                <p className="text-xs font-semibold text-teal-dark">You're eligible to join</p>
-                                {group.rules.minTrustScore && (
-                                    <p className="text-[10px] text-teal-mid">Minimum trust score: {group.rules.minTrustScore}</p>
-                                )}
-                            </div>
-                        </div>
-
                         <Button fullWidth size="lg" loading={loading} onClick={handleRequest}>
-                            Request to join
+                            Join circle
                         </Button>
                     </Card>
                 )}

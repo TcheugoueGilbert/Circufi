@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Lock, Check } from 'lucide-react'
@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/index'
 import { clsx } from 'clsx'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
+import { formatNaira } from '@/lib/utils'
 
 const METHODS = ['bank_transfer', 'mobile_money', 'manual']
 
@@ -28,9 +29,19 @@ interface Group {
 }
 
 export default function LogPaymentPage() {
+    // useSearchParams() needs a Suspense boundary for static rendering
+    return (
+        <Suspense fallback={null}>
+            <LogPaymentForm />
+        </Suspense>
+    )
+}
+
+function LogPaymentForm() {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const groupId = searchParams?.get('groupId')
+    const [groupId, setGroupId] = useState<string | null>(searchParams?.get('groupId') ?? null)
+    const [myGroups, setMyGroups] = useState<{ id: string; name: string; rules: { contributionAmount: number } }[] | null>(null)
     const { user } = useAuthStore()
 
     const [group, setGroup] = useState<Group | null>(null)
@@ -50,8 +61,26 @@ export default function LogPaymentPage() {
         }
         if (groupId) {
             fetchGroupData()
+        } else {
+            fetchMyGroups()
         }
     }, [groupId, user])
+
+    // No circle in the URL (e.g. opened from the dashboard): let the user pick one
+    const fetchMyGroups = async () => {
+        try {
+            const response = await api.get('/v1/groups')
+            const groups = response.data.data || []
+            if (groups.length === 1) {
+                setGroupId(groups[0].id)
+            } else {
+                setMyGroups(groups)
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Failed to load your circles')
+            setMyGroups([])
+        }
+    }
 
     const fetchGroupData = async () => {
         try {
@@ -97,8 +126,6 @@ export default function LogPaymentPage() {
         }
     }
 
-    const formatNaira = (amount: number) => `₦${amount.toLocaleString()}`
-
     const getMethodLabel = (m: string) => {
         const labels: Record<string, string> = {
             'bank_transfer': 'Bank Transfer',
@@ -121,7 +148,7 @@ export default function LogPaymentPage() {
                 </p>
                 <div className="flex items-center gap-1.5 bg-teal-light text-teal-dark text-xs font-medium px-3 py-1.5 rounded-full mb-8">
                     <Lock size={11} />
-                    Permanently recorded
+                    Waiting for admin confirmation
                 </div>
                 <div className="flex flex-col gap-2 w-full max-w-xs">
                     {groupId && (
@@ -136,6 +163,32 @@ export default function LogPaymentPage() {
             </div>
         </AppShell>
     )
+
+    if (!groupId && myGroups) {
+        return (
+            <AppShell>
+                <h1 className="text-xl font-bold text-navy tracking-tight mb-5">Log contribution</h1>
+                {myGroups.length === 0 ? (
+                    <Card>
+                        <p className="text-sm text-[#8A91A0] mb-3">You are not in any circle yet.</p>
+                        <Link href="/circles/join"><Button size="sm">Join a circle</Button></Link>
+                    </Card>
+                ) : (
+                    <div className="flex flex-col gap-2 max-w-lg">
+                        <p className="text-sm text-[#8A91A0] mb-1">Which circle is this payment for?</p>
+                        {myGroups.map(g => (
+                            <button key={g.id} onClick={() => setGroupId(g.id)} className="text-left">
+                                <Card className="hover:border-teal transition-colors">
+                                    <p className="text-sm font-semibold text-navy">{g.name}</p>
+                                    <p className="text-xs text-[#8A91A0]">{formatNaira(g.rules.contributionAmount)} per round</p>
+                                </Card>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </AppShell>
+        )
+    }
 
     if (!group) {
         return (

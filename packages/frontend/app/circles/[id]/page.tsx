@@ -2,13 +2,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, CreditCard, Check, Lock, ExternalLink } from 'lucide-react'
+import { ArrowLeft, CreditCard, Check, Lock, Copy, SkipForward, Users, RefreshCw, Activity, Bot } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, Badge, Avatar, ProgressBar, SectionTitle } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
+import { formatNaira } from '@/lib/utils'
 
 type Tab = 'rotation' | 'members' | 'contributions' | 'audit'
 
@@ -22,6 +23,8 @@ const TABS: { id: Tab; label: string }[] = [
 interface Group {
     id: string
     name: string
+    inviteCode?: string
+    createdAt?: number
     admin: { userId: string; name: string }
     rules: {
         contributionAmount: number
@@ -53,10 +56,10 @@ interface Group {
 interface Member {
     userId: string
     displayName: string
-    reputation: {
-        totalPayments: number
-        onTimeRate: number
-    }
+    trustScore: number
+    totalPayments: number
+    onTimeRate: number
+    rotationPosition: number | null
 }
 
 interface Contribution {
@@ -66,7 +69,7 @@ interface Contribution {
     actualDate: number
     isOnTime: boolean
     paymentMethod: string
-    status: string
+    status: 'pending' | 'completed' | 'failed' | 'disputed'
 }
 
 function RotationRow({ member, position, current, done, isYou }: {
@@ -108,7 +111,7 @@ function RotationRow({ member, position, current, done, isYou }: {
                 current && 'bg-teal text-white',
                 !done && !current && 'bg-[#F7F8FA] text-[#8A91A0]'
             )}>
-        {done ? '✓ Paid' : current ? 'Active' : 'Waiting'}
+        {done ? '✓ Received' : current ? 'Active' : 'Waiting'}
       </span>
         </div>
     )
@@ -129,22 +132,22 @@ function MemberRow({ member, isAdmin }: {
                     )}
                 </div>
                 <p className="text-[11px] text-[#8A91A0]">
-                    {member.reputation.totalPayments} payments · {Math.round(member.reputation.onTimeRate)}% on time
+                    {member.totalPayments} payments · {Math.round(member.onTimeRate)}% on time
                 </p>
             </div>
             <div className={clsx(
                 'text-[11px] font-semibold px-2 py-0.5 rounded-full',
-                member.reputation.onTimeRate >= 90 ? 'bg-teal-light text-teal-dark'   :
-                    member.reputation.onTimeRate >= 70 ? 'bg-amber-50 text-amber-700'     :
+                member.onTimeRate >= 90 ? 'bg-teal-light text-teal-dark'   :
+                    member.onTimeRate >= 70 ? 'bg-amber-50 text-amber-700'     :
                         'bg-gray-100 text-gray-500'
             )}>
-                {member.reputation.onTimeRate >= 90 ? 'Reliable' : member.reputation.onTimeRate >= 70 ? 'Good' : 'New'}
+                {member.onTimeRate >= 90 ? 'Reliable' : member.onTimeRate >= 70 ? 'Good' : 'New'}
             </div>
         </div>
     )
 }
 
-function AuditRow({ label, sub, hash }: { label: string; sub: string; hash?: string }) {
+function AuditRow({ label, sub, status }: { label: string; sub: string; status?: string }) {
     return (
         <div className="flex items-start gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
             <div className="w-5 h-5 rounded-full bg-teal-light flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -153,16 +156,12 @@ function AuditRow({ label, sub, hash }: { label: string; sub: string; hash?: str
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-navy">{label}</p>
                 <p className="text-[11px] text-[#8A91A0]">{sub}</p>
-                {hash && (
-                    <div className="flex items-center gap-1 mt-1">
-                        <span className="text-[10px] font-mono text-[#8A91A0] truncate">{hash}</span>
-                        <ExternalLink size={10} className="text-teal-mid flex-shrink-0" />
-                    </div>
-                )}
             </div>
-            <span className="text-[10px] font-semibold text-teal-mid bg-teal-light px-1.5 py-0.5 rounded-full flex-shrink-0">
-        Verified
-      </span>
+            {status && (
+                <span className="text-[10px] font-semibold text-teal-mid bg-teal-light px-1.5 py-0.5 rounded-full flex-shrink-0 capitalize">
+                    {status}
+                </span>
+            )}
         </div>
     )
 }
@@ -179,6 +178,9 @@ export default function CircleDetailPage() {
     const [contributions, setContributions] = useState<Contribution[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+    const [filter, setFilter] = useState<'All' | 'On time' | 'Late' | 'Pending'>('All')
+    const [copied, setCopied] = useState(false)
+    const [busy, setBusy] = useState(false)
 
     useEffect(() => {
         if (!user) {
@@ -205,7 +207,7 @@ export default function CircleDetailPage() {
                 setMembers(membersRes.data.data || [])
             }
             if (contributionsRes.data.success) {
-                setContributions(contributionsRes.data.data || [])
+                setContributions(contributionsRes.data.data?.contributions || [])
             }
         } catch (err: any) {
             setError(err.response?.data?.error?.message || 'Failed to load circle data')
@@ -214,7 +216,45 @@ export default function CircleDetailPage() {
         }
     }
 
-    const formatNaira = (amount: number) => `₦${amount.toLocaleString()}`
+    const isAdmin = !!group && user?.id === group.admin.userId
+
+    const copyCode = () => {
+        navigator.clipboard.writeText(group?.inviteCode ?? '').catch(() => {})
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    const confirmPayment = async (contributionId: string) => {
+        setBusy(true)
+        try {
+            await api.post(`/v1/contributions/${contributionId}/verify`)
+            await fetchData()
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Could not confirm payment')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const advanceRotation = async () => {
+        if (!confirm('Close this round and move the payout to the next member?')) return
+        setBusy(true)
+        try {
+            await api.post(`/v1/groups/${id}/rotation/advance`)
+            await fetchData()
+        } catch (err: any) {
+            setError(err.response?.data?.error?.message || 'Could not advance the rotation')
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const visibleContributions = contributions.filter(c =>
+        filter === 'All' ? true :
+        filter === 'Pending' ? c.status === 'pending' :
+        filter === 'On time' ? c.isOnTime && c.status !== 'pending' :
+        !c.isOnTime && c.status !== 'pending'
+    )
 
     if (loading) {
         return (
@@ -226,7 +266,7 @@ export default function CircleDetailPage() {
         )
     }
 
-    if (error || !group) {
+    if (!group) {
         return (
             <AppShell>
                 <div className="text-center py-12">
@@ -239,15 +279,17 @@ export default function CircleDetailPage() {
         )
     }
 
-    const progress = group.rotation.cycle > 0
-        ? (group.rotation.currentBeneficiaryIndex / Object.keys(group.members).length) * 100
-        : 0
+    const progress = ((group.rotation.currentBeneficiaryIndex + 1) / Math.max(group.rotation.order.length, 1)) * 100
 
     return (
         <AppShell>
             <Link href="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-[#8A91A0] hover:text-navy transition-colors mb-4">
                 <ArrowLeft size={14} /> Back
             </Link>
+
+            {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>
+            )}
 
             {/* Header card */}
             <Card className="mb-4">
@@ -261,10 +303,20 @@ export default function CircleDetailPage() {
                     <Badge variant="active">Active</Badge>
                 </div>
 
+                {group.inviteCode && (
+                    <div className="flex items-center gap-2 bg-[#F7F8FA] rounded-lg px-3 py-2 mb-4">
+                        <span className="text-[11px] text-[#8A91A0]">Invite code</span>
+                        <span className="font-mono font-bold text-navy tracking-widest text-sm flex-1">{group.inviteCode}</span>
+                        <button onClick={copyCode} className="flex items-center gap-1 text-xs font-medium text-teal-mid hover:text-teal-dark">
+                            {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy'}
+                        </button>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-4 gap-2 mb-4">
                     {[
                         { label: 'Contribution', value: formatNaira(group.rules.contributionAmount) },
-                        { label: 'Round',        value: `${group.rotation.cycle}` },
+                        { label: 'Cycle',        value: `${group.rotation.cycle}` },
                         { label: 'Payout',       value: formatNaira(group.rules.contributionAmount * Object.keys(group.members).length) },
                         { label: 'Health',       value: `${group.stats.healthScore}%`, green: true },
                     ].map((s, i) => (
@@ -281,9 +333,25 @@ export default function CircleDetailPage() {
                     value={progress}
                     color={progress >= 75 ? 'amber' : 'teal'}
                     showLabel
-                    label={`Cycle ${group.rotation.cycle}`}
+                    label={`Cycle ${group.rotation.cycle} · payout ${group.rotation.currentBeneficiaryIndex + 1} of ${Math.max(group.rotation.order.length, 1)}`}
                 />
             </Card>
+
+            {/* Detail pages */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                {[
+                    { href: `/circles/${id}/members`,  label: 'Members',      icon: <Users size={14} /> },
+                    { href: `/circles/${id}/rotation`, label: 'Rotation',     icon: <RefreshCw size={14} /> },
+                    { href: `/circles/${id}/health`,   label: 'Health',       icon: <Activity size={14} /> },
+                    { href: `/circles/${id}/chat`,     label: 'AI Assistant', icon: <Bot size={14} /> },
+                ].map(l => (
+                    <Link key={l.href} href={l.href}>
+                        <div className="flex items-center justify-center gap-1.5 bg-white border border-[#E8EAF0] rounded-lg py-2.5 text-xs font-semibold text-navy hover:border-teal transition-colors">
+                            {l.icon} {l.label}
+                        </div>
+                    </Link>
+                ))}
+            </div>
 
             {/* Tabs */}
             <div className="flex border-b border-[#E8EAF0] mb-4 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
@@ -318,11 +386,16 @@ export default function CircleDetailPage() {
                         />
                     ))}
                     <div className="mt-4 pt-4 border-t border-[#F7F8FA]">
-                        <Link href="/log-payment">
+                        <Link href={`/log-payment?groupId=${id}`}>
                             <Button fullWidth>
                                 <CreditCard size={14} /> Log my payment for this round
                             </Button>
                         </Link>
+                        {isAdmin && (
+                            <Button fullWidth variant="secondary" className="mt-2" disabled={busy} onClick={advanceRotation}>
+                                <SkipForward size={14} /> Close round &amp; move to next payout
+                            </Button>
+                        )}
                     </div>
                 </Card>
             )}
@@ -339,12 +412,13 @@ export default function CircleDetailPage() {
             {activeTab === 'contributions' && (
                 <Card>
                     <div className="flex gap-2 mb-4 overflow-x-auto">
-                        {['All', 'On time', 'Late', 'Pending'].map((f, i) => (
+                        {(['All', 'On time', 'Late', 'Pending'] as const).map(f => (
                             <button
                                 key={f}
+                                onClick={() => setFilter(f)}
                                 className={clsx(
                                     'px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
-                                    i === 0
+                                    filter === f
                                         ? 'bg-navy text-white'
                                         : 'bg-[#F7F8FA] text-[#8A91A0] hover:bg-teal-light hover:text-teal-dark'
                                 )}
@@ -353,7 +427,10 @@ export default function CircleDetailPage() {
                             </button>
                         ))}
                     </div>
-                    {contributions.map(c => (
+                    {visibleContributions.length === 0 && (
+                        <p className="text-xs text-[#8A91A0] text-center py-6">No contributions to show</p>
+                    )}
+                    {visibleContributions.map(c => (
                         <div key={c.id} className="flex items-center gap-3 py-3 border-b border-[#F7F8FA] last:border-0">
                             <Avatar name={c.paidBy.displayName} size="sm" />
                             <div className="flex-1 min-w-0">
@@ -364,9 +441,17 @@ export default function CircleDetailPage() {
                             </div>
                             <div className="text-right flex-shrink-0">
                                 <p className="text-sm font-semibold text-navy">{formatNaira(c.amount)}</p>
-                                <Badge variant={c.isOnTime ? 'ontime' : 'late'}>
-                                    {c.isOnTime ? 'On time' : 'Late'}
-                                </Badge>
+                                {c.status === 'pending' ? (
+                                    isAdmin ? (
+                                        <Button size="sm" disabled={busy} onClick={() => confirmPayment(c.id)}>Confirm</Button>
+                                    ) : (
+                                        <Badge variant="pending">Awaiting confirmation</Badge>
+                                    )
+                                ) : (
+                                    <Badge variant={c.isOnTime ? 'ontime' : 'late'}>
+                                        {c.isOnTime ? 'On time' : 'Late'}
+                                    </Badge>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -378,12 +463,22 @@ export default function CircleDetailPage() {
                     <div className="bg-teal-light border border-teal/20 rounded-xl px-4 py-3 flex items-start gap-2">
                         <Lock size={14} className="text-teal-mid mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-teal-dark leading-relaxed">
-                            This record cannot be edited by anyone, including CircuFi. Every verified event is permanently stored.
+                            Every contribution is logged with its date, amount and confirmation status.
                         </p>
                     </div>
                     <Card>
-                        <AuditRow label="Circle created" sub={`${group.admin.name} · ${new Date().toLocaleDateString()} · Rules locked`} hash="0x3f1c...e8a4" />
-                        <p className="text-xs text-[#8A91A0] text-center py-4">Audit trail in development</p>
+                        {[...contributions].sort((a, b) => b.actualDate - a.actualDate).map(c => (
+                            <AuditRow
+                                key={c.id}
+                                label={`${c.paidBy.displayName} · ${formatNaira(c.amount)}`}
+                                sub={`${new Date(c.actualDate).toLocaleDateString()} · ${c.isOnTime ? 'on time' : 'late'}`}
+                                status={c.status}
+                            />
+                        ))}
+                        <AuditRow
+                            label="Circle created"
+                            sub={`${group.admin.name} · ${group.createdAt ? new Date(group.createdAt).toLocaleDateString() : ''}`}
+                        />
                     </Card>
                 </div>
             )}

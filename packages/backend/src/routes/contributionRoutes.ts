@@ -13,6 +13,7 @@ import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { firebaseService } from '../services/firebaseService';
 import { reputationService } from '../services/reputationService';
 import { generateId } from '../utils/helpers';
+import { Contribution } from '../types';
 
 const router = Router();
 
@@ -128,6 +129,19 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response, next: N
 
     await firebaseService.createContribution(body.groupId, newContribution);
 
+    // Tell the current beneficiary a payment is waiting for confirmation
+    if (group.rotation.currentBeneficiary !== userId) {
+      await firebaseService.createNotification(group.rotation.currentBeneficiary, {
+        id: generateId(),
+        userId: group.rotation.currentBeneficiary,
+        type: 'payment_received',
+        groupId: body.groupId,
+        message: `${user.displayName} logged a contribution of ${group.rules.currency} ${body.amount.toLocaleString()} to ${group.name}`,
+        read: false,
+        createdAt: Date.now(),
+      });
+    }
+
     res.status(201).json({
       success: true,
       data: {
@@ -159,7 +173,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response, next: N
  * GET /contributions/:groupId
  * Get all contributions for a group
  */
-router.get('/:groupId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.get('/:groupId', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { groupId } = req.params;
 
@@ -172,6 +186,18 @@ router.get('/:groupId', async (req: AuthRequest, res: Response, next: NextFuncti
           code: 'GROUP_NOT_FOUND',
           message: 'Group not found',
           statusCode: 404,
+        },
+      });
+    }
+
+    const membership = group.members[req.userId!];
+    if (!membership || membership.status === 'removed') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'NOT_A_MEMBER',
+          message: 'You are not a member of this group',
+          statusCode: 403,
         },
       });
     }
@@ -196,12 +222,23 @@ router.get('/:groupId', async (req: AuthRequest, res: Response, next: NextFuncti
  * GET /contributions/user/:userId
  * Get contributions by user (optionally filtered by groupId)
  */
-router.get('/user/:userId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.get('/user/:userId', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
     const { groupId } = req.query as { groupId?: string };
 
-    let contributions: Contribution[] = [];
+    if (userId !== req.userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only view your own payment history',
+          statusCode: 403,
+        },
+      });
+    }
+
+    let contributions: (Contribution & { groupName?: string })[] = [];
 
     if (groupId) {
       const group = await firebaseService.getGroup(groupId as string);
@@ -302,6 +339,32 @@ router.put('/:contributionId', authMiddleware, async (req: AuthRequest, res: Res
       });
     }
 
+    const isAdmin = group.admin.userId === req.userId;
+
+    // Only the admin can confirm / dispute a payment, otherwise members could self-verify
+    if (body.status !== undefined && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Only the group admin can change the status of a contribution',
+          statusCode: 403,
+        },
+      });
+    }
+
+    // Contributors may only amend their own record while it is still pending
+    if (!isAdmin && contribution.status !== 'pending') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'This contribution can no longer be edited',
+          statusCode: 403,
+        },
+      });
+    }
+
     const updates: Record<string, any> = {
       ...body,
     };
@@ -327,6 +390,7 @@ router.put('/:contributionId', authMiddleware, async (req: AuthRequest, res: Res
 
       // Update contribution metrics
       await reputationService.updateContributionMetrics(contribution.paidBy.userId, groupId);
+      await reputationService.refreshGroupStats(groupId);
     }
 
     const updatedContribution = await firebaseService.getContribution(groupId, contributionId);
@@ -443,6 +507,18 @@ router.post(
 
       // Update contribution metrics
       await reputationService.updateContributionMetrics(contribution.paidBy.userId, groupId);
+      await reputationService.refreshGroupStats(groupId);
+
+      // Tell the payer their contribution was confirmed
+      await firebaseService.createNotification(contribution.paidBy.userId, {
+        id: generateId(),
+        userId: contribution.paidBy.userId,
+        type: 'payment_received',
+        groupId,
+        message: `Your contribution to ${group.name} was confirmed`,
+        read: false,
+        createdAt: Date.now(),
+      });
 
       res.status(200).json({
         success: true,

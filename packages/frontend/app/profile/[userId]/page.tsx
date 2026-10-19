@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 
 interface User {
   id: string
-  phoneNumber: string
+  phoneNumber?: string
   displayName: string
   email?: string
   verificationStatus: string
@@ -102,7 +102,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">{user.displayName}</h1>
-                <p className="text-gray-600">{user.phoneNumber}</p>
+                {user.phoneNumber && <p className="text-gray-600">{user.phoneNumber}</p>}
                 {user.email && <p className="text-gray-500 text-sm">{user.email}</p>}
                 <div className="mt-2">
                   <span
@@ -185,9 +185,9 @@ export default function ProfilePage() {
             <p className="text-3xl font-bold text-gray-900">{user.reputation.onTimeRate.toFixed(1)}%</p>
           </div>
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <p className="text-sm text-gray-600 mb-1">Total Received</p>
+            <p className="text-sm text-gray-600 mb-1">Payouts Received</p>
             <p className="text-3xl font-bold text-gray-900">
-              {user.reputation.totalDisbursed.toLocaleString()} NGN
+              {user.reputation.totalDisbursed}
             </p>
           </div>
         </div>

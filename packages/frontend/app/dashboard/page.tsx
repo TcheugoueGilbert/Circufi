@@ -95,8 +95,8 @@ export default function DashboardPage() {
         <AppShell>
             {/* Greeting */}
             <div className="mb-5">
-                <h1 className="text-xl font-bold text-navy tracking-tight">
-                    Good morning, {user?.displayName || 'User'} 👋
+                <h1 className="text-xl font-bold text-navy tracking-tight" suppressHydrationWarning>
+                    {(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' })()}, {user?.displayName || 'User'} 👋
                 </h1>
                 <p className="text-sm text-[#8A91A0] mt-0.5">
                     You have {circles.length} active {circles.length === 1 ? 'circle' : 'circles'}

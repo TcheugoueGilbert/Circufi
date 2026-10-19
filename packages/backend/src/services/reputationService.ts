@@ -273,6 +273,92 @@ class ReputationService {
 
     return flags;
   }
+
+  /**
+   * Detailed health metrics for the circle health page / dashboard.
+   */
+  async getGroupHealthDetails(group: Group) {
+    const activeIds = Object.keys(group.members).filter((id) => group.members[id].status === 'active');
+    const users = (await Promise.all(activeIds.map((id) => firebaseService.getUser(id)))).filter(
+      (u): u is User => u !== null
+    );
+
+    const contributions = await firebaseService.getGroupContributions(group.id);
+    const completed = contributions.filter((c) => c.status === 'completed');
+    const onTimeCount = completed.filter((c) => c.isOnTime).length;
+
+    const healthScore = await this.calculateGroupHealthScore(group);
+    const averageTrustScore =
+      users.length === 0
+        ? 0
+        : Math.round(users.reduce((sum, u) => sum + this.calculateTrustScore(u), 0) / users.length);
+    const paymentCompletionRate =
+      contributions.length === 0 ? 100 : Math.round((completed.length / contributions.length) * 100);
+    const onTimePaymentRate = completed.length === 0 ? 100 : Math.round((onTimeCount / completed.length) * 100);
+    const flaggedMembers = users.filter((u) => u.reputation.flags.length > 0).length;
+
+    // Trend: on-time rate of the last 30 days compared with the 30 days before
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const rate = (from: number, to: number): number | null => {
+      const window = completed.filter((c) => c.actualDate >= from && c.actualDate < to);
+      return window.length === 0 ? null : window.filter((c) => c.isOnTime).length / window.length;
+    };
+    const recent = rate(now - 30 * DAY, now + DAY);
+    const previous = rate(now - 60 * DAY, now - 30 * DAY);
+    let trend: 'improving' | 'stable' | 'declining' = 'stable';
+    if (recent !== null && previous !== null) {
+      if (recent - previous > 0.05) trend = 'improving';
+      else if (previous - recent > 0.05) trend = 'declining';
+    }
+
+    const riskFlags = await this.getGroupRiskFlags(group.id);
+    const recommendations: string[] = [];
+    if (onTimePaymentRate < 80) recommendations.push('Send a reminder a few days before each due date to lift the on-time rate.');
+    if (flaggedMembers > 0) recommendations.push(`${flaggedMembers} member(s) carry reputation flags - review their payment history.`);
+    if (riskFlags.includes('multiple_low_trust_members')) recommendations.push('Several members have a low trust score; consider raising the minimum trust score for new members.');
+    if (riskFlags.includes('admin_missing_cycles')) recommendations.push('The admin has missed contributions in recent cycles.');
+    if (contributions.some((c) => c.status === 'pending')) recommendations.push('Some contributions are still waiting for admin confirmation.');
+    if (recommendations.length === 0) recommendations.push('Everything looks healthy. Keep confirming payments promptly.');
+
+    return {
+      groupId: group.id,
+      groupName: group.name,
+      healthScore,
+      averageTrustScore,
+      paymentCompletionRate,
+      totalMembers: Object.keys(group.members).length,
+      activeMembers: users.length,
+      totalCollected: completed.reduce((sum, c) => sum + c.amount, 0),
+      totalDisbursed: group.stats.totalDisbursed,
+      onTimePaymentRate,
+      latePayments: completed.length - onTimeCount,
+      missedPayments: contributions.filter((c) => c.status === 'failed').length,
+      flaggedMembers,
+      trend,
+      recommendations,
+      riskFlags,
+    };
+  }
+
+  /**
+   * Persist the derived group statistics (collected total + health score) after a payment is confirmed.
+   */
+  async refreshGroupStats(groupId: string): Promise<void> {
+    const group = await firebaseService.getGroup(groupId);
+    if (!group) return;
+
+    const contributions = await firebaseService.getGroupContributions(groupId);
+    const totalCollected = contributions
+      .filter((c) => c.status === 'completed')
+      .reduce((sum, c) => sum + c.amount, 0);
+    const healthScore = await this.calculateGroupHealthScore(group);
+
+    await firebaseService.updateGroup(groupId, {
+      stats: { ...group.stats, totalCollected, healthScore },
+      updatedAt: Date.now(),
+    });
+  }
 }
 
 export const reputationService = new ReputationService();

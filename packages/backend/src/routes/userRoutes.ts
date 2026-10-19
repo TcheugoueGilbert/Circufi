@@ -23,7 +23,7 @@ const updateUserSchema = z.object({
  * GET /users/:userId
  * Get user profile by ID
  */
-router.get('/:userId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.get('/:userId', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
 
@@ -43,13 +43,20 @@ router.get('/:userId', async (req: AuthRequest, res: Response, next: NextFunctio
     // Recalculate trust score
     const updatedTrustScore = reputationService.calculateTrustScore(user);
 
+    // Contact details are only shown to the user themself and to people who share a circle with them
+    let canSeeContact = req.userId === userId;
+    if (!canSeeContact) {
+      const viewer = await firebaseService.getUser(req.userId!);
+      canSeeContact = !!viewer && user.groupIds.some((id) => viewer.groupIds.includes(id));
+    }
+
     res.status(200).json({
       success: true,
       data: {
         id: user.id,
-        phoneNumber: user.phoneNumber,
+        phoneNumber: canSeeContact ? user.phoneNumber : undefined,
         displayName: user.displayName,
-        email: user.email,
+        email: canSeeContact ? user.email : undefined,
         verificationStatus: user.verificationStatus,
         joinedAt: user.joinedAt,
         lastActive: user.lastActive,

@@ -13,7 +13,7 @@ const server = app.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║         Digital Osusu - Backend Server Started           ║
+║              CircuFi - Backend Server Started            ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 
@@ -31,7 +31,11 @@ const server = app.listen(PORT, async () => {
   - GET    /api/v1/groups                 - List user's groups
   - GET    /api/v1/groups/:groupId        - Get group details
   - PUT    /api/v1/groups/:groupId        - Update group
-  - POST   /api/v1/groups/:groupId/members         - Add member
+  - POST   /api/v1/groups/:groupId/members         - Add member (admin)
+  - POST   /api/v1/groups/:groupId/join            - Join a circle
+  - GET    /api/v1/groups/:groupId/members         - List members
+  - GET    /api/v1/groups/code/:code               - Look up circle by invite code
+  - POST   /api/v1/groups/:groupId/rotation/advance - Advance rotation (admin)
   - DELETE /api/v1/groups/:groupId/members/:userId - Remove member
   - GET    /api/v1/groups/:groupId/health          - Group health score
   - GET    /api/v1/groups/:groupId/rotation        - Rotation details
@@ -41,6 +45,8 @@ const server = app.listen(PORT, async () => {
   - POST   /api/v1/contributions/:id/verify         - Verify contribution
   - GET    /api/v1/reputation/:userId               - Get reputation
   - GET    /api/v1/reputation/:userId/events        - Get reputation events
+  - GET    /api/v1/notifications/:userId            - List notifications
+  - PUT    /api/v1/notifications/:userId/mark-read  - Mark notifications as read
   - POST   /api/v1/chat/message                      - Send chat message
   - GET    /api/v1/chat/sessions                     - List chat sessions
   - GET    /api/v1/chat/sessions/:id                 - Get chat session

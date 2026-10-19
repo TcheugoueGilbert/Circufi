@@ -1,15 +1,15 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, X, GripVertical, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Plus, X, Copy, Check } from 'lucide-react'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { Card, Avatar } from '@/components/ui/index'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { Input, PhoneInput } from '@/components/ui/Input'
 import { clsx } from 'clsx'
 import api from '@/lib/api'
-import { useAuthStore } from '@/stores/authStore'
+import { isValidPhone, formatNaira } from '@/lib/utils'
 
 const STEPS = ['Details', 'Rules', 'Members', 'Launch']
 
@@ -31,13 +31,6 @@ function StepBar({ current }: { current: number }) {
 }
 
 const FREQUENCIES = ['Weekly', 'Biweekly', 'Monthly']
-const PAYOUT_OPTS  = ['Admin decides', 'Random draw', 'Set manually']
-
-const MOCK_MEMBERS = [
-    { id: 'u1', name: 'Funke Coker',    phone: '+234 801 111 0001' },
-    { id: 'u2', name: 'Ngozi Kalu',     phone: '+234 802 111 0002' },
-    { id: 'u3', name: 'Fatima Nwosu',   phone: '+234 805 111 0005' },
-]
 
 export default function CreateCirclePage() {
     const router  = useRouter()
@@ -53,59 +46,57 @@ export default function CreateCirclePage() {
     const [freq,   setFreq]   = useState('Monthly')
 
     // Step 2 state
-    const [maxMembers, setMax]    = useState(8)
-    const [startDate,  setStart]  = useState('')
-    const [payout,     setPayout] = useState('Set manually')
+    const [maxMembers, setMax] = useState(8)
 
-    // Step 3 state
-    const [search,   setSearch]  = useState('')
-    const [members,  setMembers] = useState<typeof MOCK_MEMBERS>([])
+    // Step 3 state: phone numbers (E.164) of people who already have a CircuFi account
+    const [phoneInput, setPhoneInput] = useState('')
+    const [members, setMembers] = useState<string[]>([])
+    const [created, setCreated] = useState<{ id: string; inviteCode: string; notAdded: string[] } | null>(null)
 
-    const addMember = (m: typeof MOCK_MEMBERS[0]) => {
-        if (!members.find(x => x.id === m.id)) setMembers(prev => [...prev, m])
-        setSearch('')
+    const addMember = () => {
+        if (isValidPhone(phoneInput) && !members.includes(phoneInput)) {
+            setMembers(prev => [...prev, phoneInput])
+        }
+        setPhoneInput('')
     }
-    const removeMember = (id: string) => setMembers(prev => prev.filter(m => m.id !== id))
+    const removeMember = (phone: string) => setMembers(prev => prev.filter(p => p !== phone))
 
     const handleLaunch = async () => {
         setLoading(true)
         setError('')
         try {
             const response = await api.post('/v1/groups', {
-                name: name,
-                description: desc,
-                rules: {
-                    contributionAmount: parseInt(amount),
-                    currency: 'NGN',
-                    frequency: freq.toLowerCase(),
-                    nextPaymentDate: Date.now() + (7 * 24 * 60 * 60 * 1000), // 1 week from now
-                    maxMembers: maxMembers,
-                    minTrustScore: 50
-                }
+                name,
+                description: desc || undefined,
+                contributionAmount: parseInt(amount, 10),
+                currency: 'NGN',
+                frequency: freq.toLowerCase(),
+                maxMembers,
             })
 
             if (response.data.success) {
-                const groupId = response.data.data.id
+                const { id, inviteCode } = response.data.data
 
-                // Add members if any
-                if (members.length > 0) {
-                    await Promise.all(members.map(member =>
-                        api.post(`/v1/groups/${groupId}/members`, {
-                            phoneNumber: member.phone
-                        }).catch(err => console.error('Failed to add member:', err))
-                    ))
+                // Add the invited members; numbers without a CircuFi account are reported back
+                const notAdded: string[] = []
+                for (const phone of members) {
+                    try {
+                        await api.post(`/v1/groups/${id}/members`, { phoneNumber: phone })
+                    } catch {
+                        notAdded.push(phone)
+                    }
                 }
-
-                router.push(`/circles/${groupId}`)
+                setCreated({ id, inviteCode, notAdded })
             }
         } catch (err: any) {
             setError(err.response?.data?.error?.message || 'Failed to create circle')
+        } finally {
             setLoading(false)
         }
     }
 
     const copyCode = () => {
-        navigator.clipboard.writeText('OSU-4X7K').catch(() => {})
+        navigator.clipboard.writeText(created?.inviteCode ?? '').catch(() => {})
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }
@@ -169,7 +160,7 @@ export default function CreateCirclePage() {
     const step2 = (
         <>
             <h2 className="text-lg font-bold text-navy mb-1">Set the rules</h2>
-            <p className="text-sm text-[#8A91A0] mb-5">These are locked when the circle launches</p>
+            <p className="text-sm text-[#8A91A0] mb-5">The amount and frequency cannot be changed after launch</p>
             <div className="flex flex-col gap-5">
 
                 {/* Max members stepper */}
@@ -192,41 +183,10 @@ export default function CreateCirclePage() {
                     </div>
                 </div>
 
-                {/* Start date */}
-                <Input
-                    label="Start date"
-                    type="date"
-                    value={startDate}
-                    onChange={e => setStart(e.target.value)}
-                    helper="The first contribution round begins on this date"
-                />
-
-                {/* First payout */}
-                <div>
-                    <label className="text-xs font-medium text-navy block mb-2">First payout goes to</label>
-                    <div className="flex flex-col gap-2">
-                        {PAYOUT_OPTS.map(o => (
-                            <button
-                                key={o}
-                                onClick={() => setPayout(o)}
-                                className={clsx(
-                                    'flex items-center gap-3 p-3 rounded-lg border text-sm text-left transition-colors',
-                                    payout === o
-                                        ? 'border-teal bg-teal-light text-teal-dark font-medium'
-                                        : 'border-[#E8EAF0] bg-white text-navy hover:border-teal/40'
-                                )}
-                            >
-                                <div className={clsx(
-                                    'w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0',
-                                    payout === o ? 'border-teal' : 'border-[#E8EAF0]'
-                                )}>
-                                    {payout === o && <div className="w-2 h-2 rounded-full bg-teal" />}
-                                </div>
-                                {o}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                <p className="text-xs text-[#8A91A0]">
+                    The first payment is due one {freq === 'Weekly' ? 'week' : freq === 'Biweekly' ? 'fortnight' : 'month'} after launch.
+                    The rotation order follows the order in which members join.
+                </p>
 
                 <div className="flex gap-2">
                     <Button variant="secondary" size="lg" className="flex-1" onClick={back}>← Back</Button>
@@ -237,66 +197,33 @@ export default function CreateCirclePage() {
     )
 
     /* ─── Step 3: Members ────────────────── */
-    const filtered = MOCK_MEMBERS.filter(m =>
-        !members.find(x => x.id === m.id) &&
-        (m.name.toLowerCase().includes(search.toLowerCase()) || m.phone.includes(search))
-    )
-
     const step3 = (
         <>
             <h2 className="text-lg font-bold text-navy mb-1">Invite members</h2>
-            <p className="text-sm text-[#8A91A0] mb-5">Search by name or phone number</p>
+            <p className="text-sm text-[#8A91A0] mb-5">Add people by phone number, or share the invite code after launch</p>
             <div className="flex flex-col gap-4">
-
-                {/* Search */}
-                <div className="relative">
-                    <Input
-                        placeholder="Search by name or phone..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
-                    {search && filtered.length > 0 && (
-                        <div className="absolute z-10 top-full left-0 right-0 bg-white border border-[#E8EAF0] rounded-xl shadow-lg mt-1 overflow-hidden">
-                            {filtered.map(m => (
-                                <button
-                                    key={m.id}
-                                    onClick={() => addMember(m)}
-                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#F7F8FA] transition-colors border-b border-[#F7F8FA] last:border-0"
-                                >
-                                    <Avatar name={m.name} size="sm" />
-                                    <div className="flex-1 text-left">
-                                        <p className="text-sm font-medium text-navy">{m.name}</p>
-                                        <p className="text-xs text-[#8A91A0]">{m.phone}</p>
-                                    </div>
-                                    <Plus size={14} className="text-teal" />
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                        <PhoneInput label="Member phone number" value={phoneInput} onChange={setPhoneInput} />
+                    </div>
+                    <Button variant="secondary" disabled={!isValidPhone(phoneInput)} onClick={addMember}>
+                        <Plus size={14} /> Add
+                    </Button>
                 </div>
 
-                {/* Added members */}
                 {members.length > 0 && (
                     <div>
                         <p className="text-xs font-medium text-[#8A91A0] mb-2">
-                            {members.length} member{members.length !== 1 ? 's' : ''} added — drag to set rotation order
+                            {members.length} member{members.length !== 1 ? 's' : ''} added — they join the rotation in this order
                         </p>
                         <div className="flex flex-col gap-2">
-                            {members.map((m, i) => (
-                                <div
-                                    key={m.id}
-                                    className="flex items-center gap-3 bg-white border border-[#E8EAF0] rounded-lg px-3 py-2.5"
-                                >
-                                    <GripVertical size={14} className="text-[#8A91A0] cursor-grab flex-shrink-0" />
+                            {members.map((phone, i) => (
+                                <div key={phone} className="flex items-center gap-3 bg-white border border-[#E8EAF0] rounded-lg px-3 py-2.5">
                                     <span className="w-5 h-5 rounded-full bg-[#F7F8FA] text-[10px] font-bold text-[#8A91A0] flex items-center justify-center flex-shrink-0">
-                    {i + 1}
-                  </span>
-                                    <Avatar name={m.name} size="sm" />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-navy truncate">{m.name}</p>
-                                        <p className="text-[11px] text-[#8A91A0]">{m.phone}</p>
-                                    </div>
-                                    <button onClick={() => removeMember(m.id)} className="text-[#8A91A0] hover:text-red-500 transition-colors">
+                                        {i + 2}
+                                    </span>
+                                    <p className="flex-1 text-sm font-medium text-navy">{phone}</p>
+                                    <button onClick={() => removeMember(phone)} className="text-[#8A91A0] hover:text-red-500 transition-colors">
                                         <X size={14} />
                                     </button>
                                 </div>
@@ -305,20 +232,9 @@ export default function CreateCirclePage() {
                     </div>
                 )}
 
-                {/* Share code */}
-                <div>
-                    <p className="text-xs font-medium text-[#8A91A0] mb-2">Or share your circle code</p>
-                    <div className="flex items-center gap-2 bg-[#F7F8FA] rounded-xl border border-[#E8EAF0] px-4 py-3">
-                        <span className="font-mono font-bold text-navy tracking-widest text-base flex-1">OSU-4X7K</span>
-                        <button
-                            onClick={copyCode}
-                            className="flex items-center gap-1.5 text-xs font-medium text-teal-mid hover:text-teal-dark transition-colors"
-                        >
-                            {copied ? <Check size={13} /> : <Copy size={13} />}
-                            {copied ? 'Copied!' : 'Copy'}
-                        </button>
-                    </div>
-                </div>
+                <p className="text-[11px] text-[#8A91A0]">
+                    Only people who already have a CircuFi account can be added this way. Everyone else can join with the invite code you get after launching.
+                </p>
 
                 <div className="flex gap-2">
                     <Button variant="secondary" size="lg" className="flex-1" onClick={back}>← Back</Button>
@@ -332,18 +248,17 @@ export default function CreateCirclePage() {
     const step4 = (
         <>
             <h2 className="text-lg font-bold text-navy mb-1">Review & launch</h2>
-            <p className="text-sm text-[#8A91A0] mb-5">Rules are locked once the circle launches</p>
+            <p className="text-sm text-[#8A91A0] mb-5">The amount and frequency cannot be changed after launch</p>
             <div className="flex flex-col gap-4">
 
                 {/* Summary card */}
                 <Card className="bg-[#F7F8FA]">
                     {[
-                        { label: 'Circle name',  value: name || 'Ikeja Market Women' },
-                        { label: 'Contribution', value: `₦${parseInt(amount || '25000').toLocaleString()} / ${freq}` },
-                        { label: 'Payout pool',  value: `₦${(parseInt(amount || '25000') * maxMembers).toLocaleString()}` },
+                        { label: 'Circle name',  value: name },
+                        { label: 'Contribution', value: `${formatNaira(parseInt(amount || '0', 10))} / ${freq}` },
+                        { label: 'Payout pool',  value: formatNaira(parseInt(amount || '0', 10) * maxMembers) },
                         { label: 'Max members',  value: maxMembers },
-                        { label: 'Start date',   value: startDate || 'Jul 1, 2026' },
-                        { label: 'First payout', value: payout },
+                        { label: 'Invited now',  value: members.length },
                     ].map((r, i) => (
                         <div key={i} className="flex justify-between py-2 border-b border-[#E8EAF0] last:border-0 text-sm">
                             <span className="text-[#8A91A0]">{r.label}</span>
@@ -352,20 +267,6 @@ export default function CreateCirclePage() {
                     ))}
                 </Card>
 
-                {/* Members preview */}
-                {members.length > 0 && (
-                    <Card>
-                        <p className="text-xs font-semibold text-[#8A91A0] mb-3">Rotation order</p>
-                        {members.map((m, i) => (
-                            <div key={m.id} className="flex items-center gap-3 py-2 border-b border-[#F7F8FA] last:border-0">
-                                <span className="text-xs font-bold text-[#8A91A0] w-4">{i + 1}</span>
-                                <Avatar name={m.name} size="xs" />
-                                <span className="text-sm text-navy">{m.name}</span>
-                            </div>
-                        ))}
-                    </Card>
-                )}
-
                 <div className="flex gap-2">
                     <Button variant="secondary" size="lg" className="flex-1" onClick={back}>← Edit</Button>
                     <Button size="lg" className="flex-1" loading={loading} onClick={handleLaunch}>
@@ -373,13 +274,35 @@ export default function CreateCirclePage() {
                     </Button>
                 </div>
                 <p className="text-[11px] text-[#8A91A0] text-center">
-                    Circle rules and rotation order will be permanently recorded
+                    Members join the rotation in the order they are added
                 </p>
             </div>
         </>
     )
 
     const content = [step1, step2, step3, step4][step]
+
+    if (created) return (
+        <AppShell>
+            <div className="max-w-lg">
+                <h2 className="text-lg font-bold text-navy mb-1">Your circle is live 🎉</h2>
+                <p className="text-sm text-[#8A91A0] mb-5">Share this code so people can join from the “Join circle” page</p>
+                <div className="flex items-center gap-2 bg-[#F7F8FA] rounded-xl border border-[#E8EAF0] px-4 py-3 mb-4">
+                    <span className="font-mono font-bold text-navy tracking-widest text-base flex-1">{created.inviteCode}</span>
+                    <button onClick={copyCode} className="flex items-center gap-1.5 text-xs font-medium text-teal-mid hover:text-teal-dark transition-colors">
+                        {copied ? <Check size={13} /> : <Copy size={13} />}
+                        {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                </div>
+                {created.notAdded.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-4 text-sm">
+                        These numbers have no CircuFi account yet, so they were not added: {created.notAdded.join(', ')}. Send them the invite code instead.
+                    </div>
+                )}
+                <Button fullWidth size="lg" onClick={() => router.push(`/circles/${created.id}`)}>Open circle</Button>
+            </div>
+        </AppShell>
+    )
 
     return (
         <AppShell>

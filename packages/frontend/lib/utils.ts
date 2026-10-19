@@ -70,3 +70,7 @@ export const calcPayoutPool = (contribution: number, members: number): number =>
 /* ─── Percentage ─────────────────────────── */
 export const toPercent = (value: number, total: number): number =>
     total === 0 ? 0 : Math.round((value / total) * 100)
+
+/* ─── Phone numbers (E.164, as required by the API) ─── */
+/** Nigeria: +234 + 10 digits, Cameroon: +237 + 9 digits */
+export const isValidPhone = (phone: string): boolean => /^(\+234\d{10}|\+237\d{9})$/.test(phone)

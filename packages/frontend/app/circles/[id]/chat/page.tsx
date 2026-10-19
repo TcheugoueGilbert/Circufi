@@ -43,11 +43,16 @@ export default function CircleChatPage() {
 
   const loadChatSession = async () => {
     try {
-      const response = await api.get(`/v1/chat/sessions?groupId=${groupId}`)
-      if (response.data.success && response.data.data.length > 0) {
-        const session = response.data.data[0]
-        setSessionId(session.id)
-        setMessages(session.messages || [])
+      // The list holds summaries only; load the full conversation of the most recent session
+      const list = await api.get(`/v1/chat/sessions?groupId=${groupId}`)
+      const sessions: { id: string; updatedAt: number }[] = list.data.data?.sessions || []
+      if (list.data.success && sessions.length > 0) {
+        const latest = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+        const full = await api.get(`/v1/chat/sessions/${latest.id}`)
+        if (full.data.success) {
+          setSessionId(latest.id)
+          setMessages(full.data.data.messages || [])
+        }
       }
     } catch (err) {
       console.error('Failed to load chat session:', err)
@@ -73,25 +78,14 @@ export default function CircleChatPage() {
     try {
       const response = await api.post('/v1/chat/message', {
         groupId,
-        message: input.trim(),
-        sessionId,
+        message: userMessage.content,
+        sessionId: sessionId ?? undefined,
       })
 
       if (response.data.success) {
-        const { message: aiMessage, sessionId: newSessionId } = response.data.data
-
-        if (!sessionId && newSessionId) {
-          setSessionId(newSessionId)
-        }
-
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: aiMessage,
-          timestamp: Date.now(),
-        }
-
-        setMessages((prev) => [...prev, assistantMessage])
+        // The API returns the whole conversation, including the assistant's reply
+        setSessionId(response.data.data.sessionId)
+        setMessages(response.data.data.messages)
       }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to send message')

@@ -1,7 +1,7 @@
 /**
  * Ollama AI Service
  * Handles AI-powered chat and context-aware responses
- * Using Ollama as local LLM provider instead of Claude
+ * Uses Ollama as a local LLM provider
  */
 
 import axios, { AxiosInstance } from 'axios';
@@ -26,7 +26,7 @@ class OllamaAIService {
 
     this.client = axios.create({
       baseURL: apiUrl,
-      timeout: 30000, // 30 seconds
+      timeout: parseInt(process.env.OLLAMA_TIMEOUT_MS || '60000', 10), // local models can be slow
     });
   }
 
@@ -41,6 +41,7 @@ class OllamaAIService {
   ): Promise<ChatSession> {
     // Get or create session
     let session: ChatSession;
+    const isNewSession = !sessionId;
 
     if (sessionId) {
       const existingSession = await firebaseService.getChatSession(userId, sessionId);
@@ -65,7 +66,7 @@ class OllamaAIService {
 
     // Generate AI response using Ollama
     const systemPrompt = this.buildSystemPrompt(context);
-    const response = await this.generateResponse(message, systemPrompt, session.messages);
+    const response = await this.generateResponse(systemPrompt, session.messages);
 
     // Add assistant response to session
     session.messages.push({
@@ -75,12 +76,23 @@ class OllamaAIService {
       timestamp: Date.now(),
     });
 
-    // Save updated session
+    // Save the session. A new session must be created in full (groupId, userId, ...),
+    // otherwise a partial `update()` would leave an orphan node that cannot be continued.
     session.updatedAt = Date.now();
-    await firebaseService.updateChatSession(userId, session.id, {
-      messages: session.messages,
-      updatedAt: session.updatedAt,
-    });
+    session.context = {
+      currentBeneficiary: context.currentBeneficiaryName,
+      nextPaymentDate: context.nextPaymentDate,
+      myPaymentStatus: context.myPaymentStatus,
+    };
+    if (isNewSession) {
+      await firebaseService.createChatSession(userId, session);
+    } else {
+      await firebaseService.updateChatSession(userId, session.id, {
+        messages: session.messages,
+        context: session.context,
+        updatedAt: session.updatedAt,
+      });
+    }
 
     return session;
   }
@@ -89,20 +101,12 @@ class OllamaAIService {
    * Generate response using Ollama
    */
   private async generateResponse(
-    userMessage: string,
     systemPrompt: string,
     conversationHistory: OllamaMessage[]
   ): Promise<string> {
     try {
-      // Prepare messages in Ollama format
-      const messages: OllamaMessage[] = [
-        {
-          role: 'user',
-          content: systemPrompt + '\n\nUser: ' + userMessage,
-        },
-      ];
-
-      // Add conversation history (keep last 10 messages for context)
+      // `conversationHistory` already ends with the user's latest message, so it is
+      // not appended a second time. The prompt goes in a real `system` message.
       const recentHistory = conversationHistory.slice(-10).map((msg) => ({
         role: msg.role,
         content: msg.content,
@@ -110,8 +114,8 @@ class OllamaAIService {
 
       const response = await this.client.post('/api/chat', {
         model: this.modelName,
-        messages: [...recentHistory, ...messages],
-        temperature: this.temperature,
+        messages: [{ role: 'system', content: systemPrompt }, ...recentHistory],
+        options: { temperature: this.temperature },
         stream: false,
       });
 
@@ -132,7 +136,7 @@ class OllamaAIService {
    * Build system prompt with context
    */
   private buildSystemPrompt(context: any): string {
-    return `You are a helpful financial assistant for Digital Osusu, a cooperative savings platform.
+    return `You are a helpful assistant for CircuFi, a platform for rotating savings circles (ajo / osusu / esusu).
 
 User Information:
 - Trust Score: ${context.trustScore}/100

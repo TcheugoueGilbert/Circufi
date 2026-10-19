@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
+import { PhoneInput } from '@/components/ui/Input'
+import { isValidPhone } from '@/lib/utils'
 import { UserPlus, Shield, Users, AlertCircle, CheckCircle } from 'lucide-react'
 
 interface Member {
@@ -165,24 +167,11 @@ export default function CircleMembersPage() {
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <h2 className="text-lg font-semibold mb-4">Add New Member</h2>
             <form onSubmit={handleAddMember} className="space-y-4">
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number
-                </label>
-                <input
-                  id="phone"
-                  type="tel"
-                  value={addMemberPhone}
-                  onChange={(e) => setAddMemberPhone(e.target.value)}
-                  placeholder="+234701234567"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <PhoneInput label="Phone number" value={addMemberPhone} onChange={setAddMemberPhone} />
               <div className="flex space-x-3">
                 <button
                   type="submit"
-                  disabled={addingMember}
+                  disabled={addingMember || !isValidPhone(addMemberPhone)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   {addingMember ? 'Adding...' : 'Add Member'}
