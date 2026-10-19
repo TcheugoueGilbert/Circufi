@@ -19,8 +19,6 @@ export class ApiError extends Error {
  * Global error handler
  */
 export function errorHandler(err: Error | ApiError, req: Request, res: Response, next: NextFunction) {
-  console.error('Error:', err);
-
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
       success: false,
@@ -70,6 +68,11 @@ export function errorHandler(err: Error | ApiError, req: Request, res: Response,
     code: 'INTERNAL_SERVER_ERROR',
     statusCode: 500,
   };
+
+  // Only unexpected failures are logged; domain errors (404, 409, ...) are part of normal operation
+  if (errorConfig.statusCode >= 500) {
+    console.error('Error:', err);
+  }
 
   return res.status(errorConfig.statusCode).json({
     success: false,

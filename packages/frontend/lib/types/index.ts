@@ -1,101 +1,66 @@
-/* ─── Core domain types for CircuFi ─────────────────────────────── */
+/* ─── API-shaped domain types for CircuFi (mirror packages/backend/src/types.ts) ─── */
 
-export interface User {
-    id: string
-    name: string
-    phone: string
-    createdAt: Date
-    contributionHistory: ContributionEvent[]
-    circlesCompleted: number
-    onTimePayments: number
+export interface Reputation {
     totalPayments: number
-    flags: string[]
-}
-
-export interface Member {
-    userId: string
-    name: string
-    phone: string
-    rotationOrder: number
-    joinedAt: Date
-    contributionHistory: ContributionEvent[]
     onTimeRate: number
-    totalPayments: number
-    flags: string[]
-    hasPaidCurrentRound: boolean
+    totalDisbursed: number
+    trustScore: number
+    flags?: string[]
 }
 
-export type CircleStatus = 'active' | 'complete' | 'pending' | 'paused'
+/** The user returned by POST /auth/verify and kept in the auth store */
+export interface AuthUser {
+    id: string
+    phoneNumber: string
+    displayName: string
+    email?: string
+    verificationStatus?: 'pending' | 'verified' | 'failed'
+    reputation?: Reputation
+}
+
 export type CircleFrequency = 'weekly' | 'biweekly' | 'monthly'
 
 export interface Circle {
     id: string
     name: string
-    adminId: string
-    adminName: string
-    contributionAmount: number
-    frequency: CircleFrequency
-    currentRound: number
-    totalRounds: number
-    status: CircleStatus
-    startDate: Date
-    createdAt: Date
-    inviteCode: string
-    healthScore: number
-    members: Member[]
+    description?: string
+    inviteCode?: string
+    admin: { userId: string; name: string }
+    rules: {
+        contributionAmount: number
+        currency: string
+        frequency: CircleFrequency | string
+        nextPaymentDate: number
+        maxMembers?: number
+        minTrustScore?: number
+    }
+    members: Record<string, { joinedAt: number; status: string; role: string }>
+    rotation: {
+        cycle: number
+        order: string[]
+        currentBeneficiary: string
+        currentBeneficiaryIndex: number
+    }
+    stats: {
+        totalCollected: number
+        totalDisbursed: number
+        healthScore: number
+        completedCycles: number
+    }
 }
 
-export type PaymentStatus = 'on-time' | 'late' | 'pending' | 'disputed'
-export type PaymentMethod = 'bank-transfer' | 'mobile-money' | 'cash'
-
-export interface ContributionEvent {
+export interface Contribution {
     id: string
-    circleId: string
-    circleName: string
-    memberId: string
-    memberName: string
-    beneficiaryId: string
-    beneficiaryName: string
+    groupId: string
+    groupName?: string
+    paidBy: { userId: string; displayName: string }
+    currentBeneficiary?: { userId: string; displayName: string }
     amount: number
-    scheduledDate: Date
-    paidDate?: Date
-    status: PaymentStatus
-    paymentMethod: PaymentMethod
-    reference?: string
+    currency: string
+    paymentMethod?: 'manual' | 'mobile_money' | 'bank_transfer'
+    scheduledDate?: number
+    actualDate: number
+    isOnTime: boolean
+    status: 'pending' | 'completed' | 'failed' | 'disputed'
     note?: string
-    createdAt: Date
-    onChainTxHash?: string
-}
-
-export type ReputationEventType =
-    | 'on-time'
-    | 'late'
-    | 'circle-complete'
-    | 'flag'
-    | 'verified'
-
-export interface ReputationEvent {
-    id: string
-    type: ReputationEventType
-    description: string
-    circleName: string
-    scoreDelta: number
-    createdAt: Date
-}
-
-export type NotificationType =
-    | 'payment-due'
-    | 'payment-verified'
-    | 'payout-next'
-    | 'late-flag'
-    | 'member-joined'
-
-export interface Notification {
-    id: string
-    type: NotificationType
-    title: string
-    body: string
-    circleName: string
-    read: boolean
-    createdAt: Date
 }

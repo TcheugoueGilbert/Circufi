@@ -19,9 +19,24 @@ interface VerificationCode {
 // In-memory storage for verification codes (in production, use Redis)
 const verificationCodes: Map<string, VerificationCode> = new Map();
 
+const OTP_LENGTH = 6;
+const DEV_OTP = '123456';
+
 class AuthService {
-  private jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
-  private jwtExpiration = process.env.JWT_EXPIRATION || '7d';
+  private jwtExpiration = (process.env.JWT_EXPIRATION || '7d') as jwt.SignOptions['expiresIn'];
+
+  /**
+   * The signing secret is read lazily. In production the server refuses to sign
+   * tokens with a missing secret instead of silently falling back to a default.
+   */
+  private get jwtSecret(): string {
+    const secret = process.env.JWT_SECRET;
+    if (secret) return secret;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET must be set in production');
+    }
+    return 'dev-only-insecure-secret';
+  }
 
   /**
    * Register a new user
@@ -73,7 +88,7 @@ class AuthService {
       attempts: 0,
     });
 
-    console.log(`[MOCK SMS] Verification code for ${phoneNumber}: ${verificationCode}`);
+    this.logMockSms(phoneNumber, verificationCode);
 
     return {
       userId,
@@ -151,7 +166,16 @@ class AuthService {
       attempts: 0,
     });
 
-    console.log(`[MOCK SMS] Verification code for ${phoneNumber}: ${verificationCode}`);
+    this.logMockSms(phoneNumber, verificationCode);
+  }
+
+  /**
+   * No SMS gateway is wired up yet (MVP). The code is only printed outside production.
+   */
+  private logMockSms(phoneNumber: string, code: string): void {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[MOCK SMS] Verification code for ${phoneNumber}: ${code}`);
+    }
   }
 
   /**
@@ -175,14 +199,14 @@ class AuthService {
   }
 
   /**
-   * Generate random verification code (4 digits for testing)
+   * Generate a 6-digit one-time code (matches the OTP input in the frontend).
+   * In development a fixed code is used so the flow can be tested without SMS.
    */
   private generateVerificationCode(): string {
-    // For development, use fixed code for testing
     if (process.env.NODE_ENV === 'development') {
-      return '1234';
+      return DEV_OTP;
     }
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return crypto.randomInt(0, 10 ** OTP_LENGTH).toString().padStart(OTP_LENGTH, '0');
   }
 
   /**
@@ -192,13 +216,6 @@ class AuthService {
     // Regex for international phone format: +[country code][number]
     const phoneRegex = /^\+\d{10,15}$/;
     return phoneRegex.test(phoneNumber);
-  }
-
-  /**
-   * Hash password (future use)
-   */
-  hashPassword(password: string): string {
-    return crypto.createHash('sha256').update(password).digest('hex');
   }
 }
 

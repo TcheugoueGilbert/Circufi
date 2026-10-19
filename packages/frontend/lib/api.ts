@@ -2,7 +2,8 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/authStore'
 
 const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1',
+    // Pages call versioned paths such as '/v1/groups', so the base URL ends at '/api'
+    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
     headers: { 'Content-Type': 'application/json' },
     timeout: 30000, // 30 second timeout
 })
@@ -18,7 +19,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 && typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
             useAuthStore.getState().logout()
             window.location.href = '/auth/login'
         }

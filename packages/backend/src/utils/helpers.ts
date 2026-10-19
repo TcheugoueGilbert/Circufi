@@ -2,13 +2,27 @@
  * Helper utilities
  */
 
-import { v4 as uuidv4 } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 
 /**
  * Generate unique ID
  */
 export function generateId(): string {
-  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+  return randomUUID();
+}
+
+/**
+ * Generate a short, human-friendly invite code such as "OSU-4X7K".
+ * Uses an unambiguous alphabet (no 0/O, 1/I) so it can be read out over the phone.
+ */
+export function generateInviteCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = randomBytes(4);
+  let suffix = '';
+  for (let i = 0; i < 4; i++) {
+    suffix += alphabet[bytes[i] % alphabet.length];
+  }
+  return `OSU-${suffix}`;
 }
 
 /**

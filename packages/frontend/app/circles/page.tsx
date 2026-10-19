@@ -9,27 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { CircleCard } from '@/components/circles/CircleCard'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
-
-interface Circle {
-    id: string
-    name: string
-    admin: { userId: string; name: string }
-    rules: {
-        contributionAmount: number
-        currency: string
-        frequency: string
-        nextPaymentDate: number
-    }
-    members: any
-    rotation: {
-        cycle: number
-        currentBeneficiary: string
-    }
-    stats: {
-        healthScore: number
-    }
-    status?: string
-}
+import type { Circle } from '@/lib/types'
 
 export default function CirclesPage() {
     const router = useRouter()

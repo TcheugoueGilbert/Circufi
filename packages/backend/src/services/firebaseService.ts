@@ -5,33 +5,73 @@
 import * as admin from 'firebase-admin';
 import { User, Group, Contribution, ReputationEvent, ChatSession, Notification } from '../types';
 
-class FirebaseService {
-  private db: admin.database.Database;
-  private realtimeDb: admin.database.Database;
+/**
+ * Firebase Realtime Database does not store empty arrays, so `[]` comes back as
+ * `undefined`. These helpers restore the defaults the rest of the code relies on.
+ */
+function normalizeUser(user: User | null): User | null {
+  if (!user) return null;
+  return {
+    ...user,
+    groupIds: user.groupIds || [],
+    adminGroupIds: user.adminGroupIds || [],
+    reputation: { ...user.reputation, flags: user.reputation?.flags || [] },
+  };
+}
 
-  constructor() {
-    // Initialize Firebase Admin
-    const serviceAccount = {
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    };
+function normalizeGroup(group: Group | null): Group | null {
+  if (!group) return null;
+  return {
+    ...group,
+    members: group.members || {},
+    rotation: { ...group.rotation, order: group.rotation?.order || [] },
+  };
+}
+
+function normalizeSession(session: ChatSession | null): ChatSession | null {
+  if (!session) return null;
+  return { ...session, messages: session.messages || [] };
+}
+
+class FirebaseService {
+  private database: admin.database.Database | null = null;
+
+  /**
+   * Lazily initialise the Firebase Admin SDK on first use so that importing
+   * this module (unit tests, `tsc`, `next build`) never requires credentials.
+   */
+  private get db(): admin.database.Database {
+    if (this.database) return this.database;
+
+    const { FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL, FIREBASE_DATABASE_URL } =
+      process.env;
+
+    if (!FIREBASE_PROJECT_ID || !FIREBASE_PRIVATE_KEY || !FIREBASE_CLIENT_EMAIL || !FIREBASE_DATABASE_URL) {
+      throw new Error(
+        'Firebase is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, ' +
+          'FIREBASE_CLIENT_EMAIL and FIREBASE_DATABASE_URL (see packages/backend/.env.example).'
+      );
+    }
 
     if (!admin.apps.length) {
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-        databaseURL: process.env.FIREBASE_DATABASE_URL,
+        credential: admin.credential.cert({
+          projectId: FIREBASE_PROJECT_ID,
+          privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          clientEmail: FIREBASE_CLIENT_EMAIL,
+        }),
+        databaseURL: FIREBASE_DATABASE_URL,
       });
     }
 
-    this.db = admin.database();
-    this.realtimeDb = admin.database();
+    this.database = admin.database();
+    return this.database;
   }
 
   // ========== USER OPERATIONS ==========
   async getUser(userId: string): Promise<User | null> {
     const snapshot = await this.db.ref(`users/${userId}`).get();
-    return snapshot.val();
+    return normalizeUser(snapshot.val());
   }
 
   async createUser(userId: string, user: User): Promise<void> {
@@ -48,19 +88,19 @@ class FirebaseService {
     if (!users) return null;
 
     const userKeys = Object.keys(users);
-    return users[userKeys[0]];
+    return normalizeUser(users[userKeys[0]]);
   }
 
   async getAllUsers(): Promise<User[]> {
     const snapshot = await this.db.ref('users').get();
     if (!snapshot.exists()) return [];
-    return Object.values(snapshot.val() as Record<string, User>);
+    return Object.values(snapshot.val() as Record<string, User>).map((u) => normalizeUser(u)!);
   }
 
   // ========== GROUP OPERATIONS ==========
   async getGroup(groupId: string): Promise<Group | null> {
     const snapshot = await this.db.ref(`groups/${groupId}`).get();
-    return snapshot.val();
+    return normalizeGroup(snapshot.val());
   }
 
   async createGroup(groupId: string, group: Group): Promise<void> {
@@ -74,7 +114,14 @@ class FirebaseService {
   async getAllGroups(): Promise<Group[]> {
     const snapshot = await this.db.ref('groups').get();
     if (!snapshot.exists()) return [];
-    return Object.values(snapshot.val() as Record<string, Group>);
+    return Object.values(snapshot.val() as Record<string, Group>).map((g) => normalizeGroup(g)!);
+  }
+
+  async getGroupByInviteCode(code: string): Promise<Group | null> {
+    const snapshot = await this.db.ref('groups').orderByChild('inviteCode').equalTo(code).limitToFirst(1).get();
+    const groups = snapshot.val() as Record<string, Group> | null;
+    if (!groups) return null;
+    return normalizeGroup(Object.values(groups)[0]);
   }
 
   async getUserGroups(userId: string): Promise<Group[]> {
@@ -82,7 +129,7 @@ class FirebaseService {
     if (!user) return [];
 
     const groups: Group[] = [];
-    for (const groupId of user.groupIds) {
+    for (const groupId of user.groupIds || []) {
       const group = await this.getGroup(groupId);
       if (group) groups.push(group);
     }
@@ -133,13 +180,13 @@ class FirebaseService {
 
   async getChatSession(userId: string, sessionId: string): Promise<ChatSession | null> {
     const snapshot = await this.db.ref(`chatSessions/${userId}/${sessionId}`).get();
-    return snapshot.val();
+    return normalizeSession(snapshot.val());
   }
 
   async getUserChatSessions(userId: string): Promise<ChatSession[]> {
     const snapshot = await this.db.ref(`chatSessions/${userId}`).get();
     if (!snapshot.exists()) return [];
-    return Object.values(snapshot.val() as Record<string, ChatSession>);
+    return Object.values(snapshot.val() as Record<string, ChatSession>).map((c) => normalizeSession(c)!);
   }
 
   async updateChatSession(userId: string, sessionId: string, updates: Partial<ChatSession>): Promise<void> {
@@ -160,6 +207,17 @@ class FirebaseService {
 
   async markNotificationAsRead(userId: string, notificationId: string): Promise<void> {
     await this.db.ref(`notifications/${userId}/${notificationId}`).update({ read: true });
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    const notifications = await this.getUserNotifications(userId);
+    const updates: Record<string, boolean> = {};
+    for (const n of notifications) {
+      if (!n.read) updates[`notifications/${userId}/${n.id}/read`] = true;
+    }
+    if (Object.keys(updates).length > 0) {
+      await this.db.ref().update(updates);
+    }
   }
 
   // ========== BATCH OPERATIONS ==========

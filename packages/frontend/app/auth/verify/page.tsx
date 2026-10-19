@@ -1,11 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import api from '@/lib/api'
 import { useAuthStore } from '@/stores/authStore'
 
 export default function VerifyPage() {
+  // useSearchParams() needs a Suspense boundary so the page can be prerendered
+  return (
+    <Suspense fallback={null}>
+      <VerifyForm />
+    </Suspense>
+  )
+}
+
+function VerifyForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const phoneNumber = searchParams.get('phone')
@@ -105,7 +114,7 @@ export default function VerifyPage() {
               placeholder="000000"
             />
             <p className="mt-2 text-xs text-gray-500 text-center">
-              Enter the 6-digit code (use 1234 for testing)
+              Enter the 6-digit code
             </p>
           </div>
 

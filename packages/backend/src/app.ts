@@ -12,6 +12,7 @@ import groupRoutes from './routes/groupRoutes';
 import contributionRoutes from './routes/contributionRoutes';
 import reputationRoutes from './routes/reputationRoutes';
 import chatRoutes from './routes/chatRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 
 const app: Express = express();
 
@@ -45,7 +46,7 @@ app.get('/api/version', (req: Request, res: Response) => {
     success: true,
     data: {
       version: '1.0.0',
-      name: 'Digital Osusu Backend',
+      name: 'CircuFi Backend',
       description: 'AI-Powered Trust Infrastructure for Cooperative Savings',
     },
   });
@@ -61,6 +62,7 @@ app.use(`${baseUrl}/groups`, groupRoutes);
 app.use(`${baseUrl}/contributions`, contributionRoutes);
 app.use(`${baseUrl}/reputation`, reputationRoutes);
 app.use(`${baseUrl}/chat`, chatRoutes);
+app.use(`${baseUrl}/notifications`, notificationRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

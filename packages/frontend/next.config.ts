@@ -1,7 +1,11 @@
-import type { NextConfig } from "next";
+import path from 'node:path'
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // Self-contained server bundle (.next/standalone) used by the Docker image
+  output: 'standalone',
+  // The app lives in an npm workspace: trace files from the repository root
+  outputFileTracingRoot: path.join(__dirname, '../../'),
+}
 
-export default nextConfig;
+export default nextConfig

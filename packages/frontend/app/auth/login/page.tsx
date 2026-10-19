@@ -8,6 +8,7 @@ import { AuthLayout } from '@/components/auth/AuthLayout'
 import { Button } from '@/components/ui/Button'
 import { PhoneInput, OTPInput } from '@/components/ui/Input'
 import { Divider } from '@/components/ui/index'
+import { isValidPhone } from '@/lib/utils'
 
 const LOGIN_IMAGE = 'https://images.unsplash.com/photo-1509099836639-18ba1795216d?w=1200&h=1600&fit=crop&crop=center'
 
@@ -100,7 +101,7 @@ export default function LoginPage() {
             <div className="flex flex-col gap-4">
                 <PhoneInput label="Phone number" value={phone} onChange={setPhone} />
 
-                <Button fullWidth size="lg" disabled={phone.length < 7} loading={loading} onClick={handleSendCode}>
+                <Button fullWidth size="lg" disabled={!isValidPhone(phone)} loading={loading} onClick={handleSendCode}>
                     Send verification code
                 </Button>
 

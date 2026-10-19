@@ -17,8 +17,10 @@ export default function ContactPage() {
 
     const handleSubmit = async () => {
         if (!name || !email || !message) return
+        // There is no contact API: open the visitor's email client with the message pre-filled
         setLoading(true)
-        await new Promise(r => setTimeout(r, 900))
+        const body = `${message}\n\n— ${name} (${email})`
+        window.location.href = `mailto:hello@circufi.co?subject=${encodeURIComponent('CircuFi enquiry from ' + name)}&body=${encodeURIComponent(body)}`
         setLoading(false)
         setSent(true)
     }
@@ -72,8 +74,8 @@ export default function ContactPage() {
                                 <div className="w-14 h-14 rounded-full bg-[#00C896] flex items-center justify-center mx-auto mb-4">
                                     <Check size={24} className="text-white" strokeWidth={3} />
                                 </div>
-                                <h3 className={`text-lg font-bold mb-2 ${text}`}>Message sent!</h3>
-                                <p className={`text-sm mb-5 ${muted}`}>We'll get back to you within 24 hours.</p>
+                                <h3 className={`text-lg font-bold mb-2 ${text}`}>Your email app is opening</h3>
+                                <p className={`text-sm mb-5 ${muted}`}>Send the pre-filled message from your email app and we'll reply within 24 hours.</p>
                                 <button
                                     onClick={() => { setSent(false); setName(''); setEmail(''); setMessage('') }}
                                     className="text-sm text-[#00A07A] underline underline-offset-2"

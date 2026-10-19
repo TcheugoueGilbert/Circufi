@@ -32,6 +32,7 @@ export interface Group {
   id: string;
   name: string;
   description?: string;
+  inviteCode?: string; // e.g. "OSU-4X7K" - shared with prospective members
 
   admin: {
     userId: string;

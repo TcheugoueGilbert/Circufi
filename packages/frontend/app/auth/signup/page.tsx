@@ -7,6 +7,7 @@ import { AuthLayout } from '@/components/auth/AuthLayout'
 import { Button } from '@/components/ui/Button'
 import { PhoneInput, OTPInput } from '@/components/ui/Input'
 import { Divider } from '@/components/ui/index'
+import { isValidPhone } from '@/lib/utils'
 
 const SIGNUP_IMAGE = 'https://images.unsplash.com/photo-1541963463532-d68292c34b19?w=1200&h=1600&fit=crop&crop=center'
 
@@ -82,7 +83,7 @@ export default function SignupPage() {
             <div className="flex flex-col gap-4">
                 <PhoneInput label="Phone number" value={phone} onChange={setPhone} />
 
-                <Button fullWidth size="lg" disabled={phone.length < 7} onClick={() => setStep('name')}>
+                <Button fullWidth size="lg" disabled={!isValidPhone(phone)} onClick={() => setStep('name')}>
                     Continue
                 </Button>
 
